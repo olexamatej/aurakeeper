@@ -7,6 +7,45 @@ export type VerificationEnvironment = "production" | "hosted" | "local" | "devel
 export type CommandPhase = "setup" | VerificationSuite;
 export type CommandSource = "profile" | "config" | "replicator";
 export type CommandNetworkMode = "enabled" | "disabled";
+export type BrowserAutomationRole = "replicator" | "tester";
+
+export type BrowserAutomationConfig = {
+  enabled?: boolean;
+  roles?: BrowserAutomationRole[];
+  command?: string;
+  configPath?: string;
+  remoteProvider?: string;
+  headed?: boolean;
+  sessionName?: string;
+  startupCommand?: string;
+  startupCwd?: string;
+  startupTimeoutMs?: number;
+  targetUrl?: string;
+  healthcheckUrl?: string;
+  waitForUrl?: string;
+  allowedDomains?: string[];
+};
+
+export type BrowserAutomationCapability = {
+  provider: "agent-browser";
+  command: string;
+  docsUrl: string;
+  configPath?: string;
+  remoteProvider?: string;
+  headed?: boolean;
+  sessionName?: string;
+  startupCommand?: string;
+  startupCwd: string;
+  startupTimeoutMs?: number;
+  targetUrl?: string;
+  healthcheckUrl?: string;
+  waitForUrl?: string;
+  allowedDomains?: string[];
+  workspacePath: string;
+  screenshotDir: string;
+  requiredScreenshots: string[];
+  recommendedWorkflow: string[];
+};
 
 export type VerificationCommand = {
   id: string;
@@ -78,6 +117,7 @@ export type ProjectVerificationConfig = {
   projectRoots?: string[];
   suites?: VerificationSuite[];
   commands?: VerificationCommandConfig;
+  browser?: BrowserAutomationConfig;
   allowedCommandPrefixes?: string[];
   allowedPaths?: string[];
   limits?: VerificationLimits;

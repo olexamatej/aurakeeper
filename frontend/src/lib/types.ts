@@ -93,3 +93,30 @@ export interface ExampleRun {
   error?: string
   manual?: string
 }
+
+export interface RepairArtifact {
+  id: string
+  repairAttemptId: string
+  kind: string
+  fileName: string
+  relativePath: string
+  contentType: string
+  byteSize: number
+  createdAt: string
+  url: string
+}
+
+export interface RepairAttempt {
+  id: string
+  errorLogId: string
+  status: string
+  prGate: "allow" | "block"
+  stage: string
+  selectedBackend?: string
+  profileId?: string
+  failureReason?: string
+  startedAt: string
+  finishedAt: string
+  createdAt: string
+  artifacts: RepairArtifact[]
+}

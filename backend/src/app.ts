@@ -5,6 +5,10 @@ import { config } from "./config";
 import { db } from "./db";
 import { getExampleRun, listExamples, startExampleRun } from "./examples";
 import { errorLogs, projects } from "./schema";
+import {
+  listRepairAttemptsForErrorLog,
+  readRepairArtifactContent,
+} from "./repair-artifacts";
 import { openapi } from "@elysiajs/openapi";
 import { insertErrorLog, serializeErrorLog } from "./error-logs";
 import { createSentrySource, pollSentrySource } from "./sentry";
@@ -100,6 +104,19 @@ function parseExampleRunRequest(value: unknown): {
   };
 }
 
+function requireErrorLogForProject(projectId: string, errorLogId: string) {
+  const errorLog = db
+    .select()
+    .from(errorLogs)
+    .where(eq(errorLogs.id, errorLogId))
+    .get();
+
+  if (!errorLog || errorLog.projectId !== projectId) {
+    throw new ApiError(404, "not_found", "Error log not found");
+  }
+
+  return errorLog;
+}
 export const app = new Elysia()
   .onError(({ code, error, set }) => {
     if (code === "NOT_FOUND") {
@@ -223,4 +240,30 @@ export const app = new Elysia()
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));
 
     return pollSentrySource(project.id, params.sourceId);
+  })
+  .get("/v1/logs/errors/:logId/repair-attempts", ({ request, params }) => {
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    requireErrorLogForProject(project.id, params.logId);
+
+    return listRepairAttemptsForErrorLog(project.id, params.logId);
+  })
+  .get("/v1/logs/errors/:logId/artifacts/:artifactId", async ({ request, params, set }) => {
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    requireErrorLogForProject(project.id, params.logId);
+
+    const artifact = await readRepairArtifactContent(project.id, params.logId, params.artifactId);
+
+    if (!artifact) {
+      throw new ApiError(404, "not_found", "Artifact not found");
+    }
+
+    set.headers["Content-Type"] = artifact.contentType;
+    set.headers["Content-Disposition"] = `inline; filename="${artifact.fileName}"`;
+
+    return new Response(Buffer.from(artifact.content), {
+      headers: {
+        "Content-Type": artifact.contentType,
+        "Content-Disposition": `inline; filename="${artifact.fileName}"`,
+      },
+    });
   });

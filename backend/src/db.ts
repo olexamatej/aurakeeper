@@ -90,6 +90,54 @@ sqlite.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS repair_attempts (
+    id TEXT PRIMARY KEY NOT NULL,
+    error_log_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    pr_gate TEXT NOT NULL,
+    stage TEXT NOT NULL,
+    selected_backend TEXT,
+    profile_id TEXT,
+    artifacts_dir TEXT NOT NULL,
+    failure_reason TEXT,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS repair_attempts_error_log_id_idx
+    ON repair_attempts (error_log_id);
+
+  CREATE INDEX IF NOT EXISTS repair_attempts_project_id_idx
+    ON repair_attempts (project_id);
+
+  CREATE INDEX IF NOT EXISTS repair_attempts_created_at_idx
+    ON repair_attempts (created_at);
+
+  CREATE TABLE IF NOT EXISTS repair_artifacts (
+    id TEXT PRIMARY KEY NOT NULL,
+    repair_attempt_id TEXT NOT NULL,
+    error_log_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    relative_path TEXT NOT NULL,
+    absolute_path TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    byte_size INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS repair_artifacts_repair_attempt_id_idx
+    ON repair_artifacts (repair_attempt_id);
+
+  CREATE INDEX IF NOT EXISTS repair_artifacts_error_log_id_idx
+    ON repair_artifacts (error_log_id);
+
+  CREATE INDEX IF NOT EXISTS repair_artifacts_project_id_idx
+    ON repair_artifacts (project_id);
 `);
 
 if (!hasColumn("error_logs", "project_id")) {

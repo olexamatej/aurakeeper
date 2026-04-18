@@ -15,7 +15,39 @@ The server reads these environment variables:
 
 - `ADMIN_TOKEN` - expected value for the `X-Admin-Token` header on `POST /v1/projects`. Defaults to `bahno`.
 - `DATABASE_PATH` - SQLite database location. Defaults to `data/aurakeeper.sqlite`.
+- `ARTIFACTS_PATH` - persistent directory for copied repair artifacts. Defaults to `data/artifacts`.
 - `PORT` - bind port. Defaults to `3000`.
+
+Project-specific verification settings can also live in `.aurakeeper.json`,
+`.aurakeeper.yml`, or `.aurakeeper.yaml` at the repository root. Frontend
+projects can now configure browser automation for the `replicator` and `tester`
+agents through a `browser` block, for example:
+
+```json
+{
+  "browser": {
+    "enabled": true,
+    "roles": ["replicator", "tester"],
+    "command": "agent-browser",
+    "targetUrl": "http://127.0.0.1:3000",
+    "startupCommand": "pnpm dev",
+    "startupCwd": "frontend",
+    "allowedDomains": ["127.0.0.1", "localhost"]
+  }
+}
+```
+
+When a browser-facing error is detected, the orchestrator passes this capability
+to those agents and keeps the patched verification workspace alive long enough
+for browser-based tester runs.
+
+Repair attempts can now be durably linked to a stored error log. The helper in
+`src/repair-artifacts.ts` copies the orchestration artifacts into
+`ARTIFACTS_PATH/<projectId>/<errorLogId>/<repairAttemptId>/`, records metadata
+in SQLite, and exposes them through:
+
+- `GET /v1/logs/errors/:logId/repair-attempts`
+- `GET /v1/logs/errors/:logId/artifacts/:artifactId`
 
 ## Example Requests
 
