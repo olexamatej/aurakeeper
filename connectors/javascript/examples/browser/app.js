@@ -2,11 +2,10 @@
   var statusNode = document.getElementById("status");
   var handledButton = document.getElementById("capture-handled");
   var rejectionButton = document.getElementById("trigger-rejection");
-  var endpoint = "https://api.example.com/v1/logs/errors";
-  var apiToken = "replace-with-real-api-token";
-  var isConfigured =
-    endpoint !== "https://api.example.com/v1/logs/errors" &&
-    apiToken !== "replace-with-real-api-token";
+  var endpoint =
+    window.AURAKEEPER_ENDPOINT || "http://127.0.0.1:3000/v1/logs/errors";
+  var apiToken = window.AURAKEEPER_API_TOKEN || "";
+  var isConfigured = apiToken.length > 0;
 
   function updateStatus(message) {
     statusNode.textContent = message;
@@ -20,7 +19,7 @@
   if (!isConfigured) {
     setButtonsDisabled(true);
     updateStatus(
-      "Replace the placeholder endpoint and API token in app.js before using this example."
+      "Set window.AURAKEEPER_API_TOKEN before using this example."
     );
     return;
   }
@@ -91,6 +90,6 @@
 
   setButtonsDisabled(false);
   updateStatus(
-    "Browser connector installed. Captures will be sent to the configured AuraKeeper endpoint."
+    "Browser connector installed and ready to send to AuraKeeper."
   );
 })();

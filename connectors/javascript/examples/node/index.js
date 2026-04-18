@@ -1,12 +1,11 @@
 const { createAuraKeeperConnector } = require("../../aurakeeper");
 
-const endpoint = process.env.AURAKEEPER_ENDPOINT;
+const endpoint =
+  process.env.AURAKEEPER_ENDPOINT || "http://127.0.0.1:3000/v1/logs/errors";
 const apiToken = process.env.AURAKEEPER_API_TOKEN;
 
-if (!endpoint || !apiToken) {
-  console.error(
-    "Set AURAKEEPER_ENDPOINT and AURAKEEPER_API_TOKEN before running this example."
-  );
+if (!apiToken) {
+  console.error("Set AURAKEEPER_API_TOKEN before running this example.");
   process.exit(1);
 }
 
@@ -28,54 +27,6 @@ const connector = createAuraKeeperConnector({
 
 connector.install();
 
-async function flushAndExit(signal) {
-  try {
-    await connector.flush();
-  } finally {
-    process.exit(signal === "SIGINT" ? 130 : 0);
-  }
-}
-
-async function runExampleJob() {
-  try {
-    throw new Error("Handled Node.js example error");
-  } catch (error) {
-    await connector.captureException(error, {
-      handled: true,
-      level: "error",
-      correlationId: "job_reconcile_payments_123",
-      request: {
-        method: "JOB",
-        path: "reconcile-payments",
-      },
-      user: {
-        id: "system",
-      },
-      details: {
-        jobName: "reconcile-payments",
-        attempt: 1,
-      },
-    });
-  }
-}
-
-process.on("SIGINT", function onSigint() {
-  flushAndExit("SIGINT");
-});
-
-process.on("SIGTERM", function onSigterm() {
-  flushAndExit("SIGTERM");
-});
-
-runExampleJob()
-  .then(function onComplete() {
-    console.log("Handled example error sent to AuraKeeper.");
-    return connector.flush();
-  })
-  .then(function onFlushed() {
-    console.log("Connector flush completed.");
-  })
-  .catch(function onError(error) {
-    console.error("Node example failed.", error);
-    process.exitCode = 1;
-  });
+setTimeout(function triggerUncaughtError() {
+  throw new Error("Uncaught Node.js example error");
+}, 10);

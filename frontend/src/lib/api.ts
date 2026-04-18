@@ -1,4 +1,4 @@
-import type { ErrorLog, RepairAttempt, StoredProject } from "./types"
+import type { ErrorLog, ExampleDefinition, ExampleRun, RepairAttempt, StoredProject } from "./types"
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000"
 const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? ""
@@ -45,6 +45,39 @@ export async function listErrorLogs(apiToken: string): Promise<ErrorLog[]> {
     },
   })
   return handleResponse<ErrorLog[]>(response)
+}
+
+export async function listExamples(): Promise<ExampleDefinition[]> {
+  const response = await fetch(`${API_URL}/v1/examples`, {
+    headers: {
+      "X-Admin-Token": ADMIN_TOKEN,
+    },
+  })
+  return handleResponse<ExampleDefinition[]>(response)
+}
+
+export async function startExampleRun(
+  exampleId: string,
+  apiToken: string,
+): Promise<ExampleRun> {
+  const response = await fetch(`${API_URL}/v1/examples/${exampleId}/runs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Admin-Token": ADMIN_TOKEN,
+    },
+    body: JSON.stringify({ apiToken }),
+  })
+  return handleResponse<ExampleRun>(response)
+}
+
+export async function getExampleRun(runId: string): Promise<ExampleRun> {
+  const response = await fetch(`${API_URL}/v1/examples/runs/${runId}`, {
+    headers: {
+      "X-Admin-Token": ADMIN_TOKEN,
+    },
+  })
+  return handleResponse<ExampleRun>(response)
 }
 
 export async function listRepairAttempts(

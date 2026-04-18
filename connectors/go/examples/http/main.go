@@ -6,21 +6,24 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	aurakeeper "github.com/aurakeeper/aurakeeper/connectors/go"
 )
 
 func main() {
-	endpoint := os.Getenv("AURAKEEPER_ENDPOINT")
+	endpoint := envOrDefault("AURAKEEPER_ENDPOINT", "http://127.0.0.1:3000/v1/logs/errors")
 	apiToken := os.Getenv("AURAKEEPER_API_TOKEN")
-	if endpoint == "" || apiToken == "" {
-		log.Fatal("set AURAKEEPER_ENDPOINT and AURAKEEPER_API_TOKEN before running this example")
+	if apiToken == "" {
+		log.Fatal("set AURAKEEPER_API_TOKEN before running this example")
 	}
+	appPort := envOrDefault("AURAKEEPER_APP_PORT", "8080")
+	panicPath := normalizePath(envOrDefault("AURAKEEPER_PANIC_PATH", "/panic"))
 
 	connector, err := aurakeeper.New(aurakeeper.Options{
 		Endpoint:       endpoint,
 		APIToken:       apiToken,
-		ServiceName:    "go-http-example",
+		ServiceName:    "go-runtime-example",
 		ServiceVersion: "1.0.0",
 		Environment:    "development",
 		Framework:      "net/http",
@@ -41,29 +44,29 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(writer http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintln(writer, "Visit /handled or /panic")
+		fmt.Fprintf(writer, "Visit %s to trigger a runtime panic\n", panicPath)
 	})
-	mux.HandleFunc("/handled", func(writer http.ResponseWriter, request *http.Request) {
-		_, err := connector.CaptureHTTPError(request.Context(), errors.New("handled example error"), request, aurakeeper.CaptureOptions{
-			Level:   "error",
-			Handled: aurakeeper.Bool(true),
-			Details: map[string]any{
-				"route": "/handled",
-			},
-			User: map[string]any{
-				"id": "example-user",
-			},
-		})
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusBadGateway)
-			return
-		}
-		fmt.Fprintln(writer, "Handled error sent to AuraKeeper.")
-	})
-	mux.HandleFunc("/panic", func(http.ResponseWriter, *http.Request) {
-		panic("panic example")
+	mux.HandleFunc(panicPath, func(http.ResponseWriter, *http.Request) {
+		panic(errors.New("go runtime example panic"))
 	})
 
-	log.Println("Listening on http://127.0.0.1:8080")
-	log.Fatal(http.ListenAndServe(":8080", connector.Middleware(mux)))
+	log.Printf("Listening on http://127.0.0.1:%s%s", appPort, panicPath)
+	log.Fatal(http.ListenAndServe(":"+appPort, connector.Middleware(mux)))
+}
+
+func envOrDefault(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func normalizePath(value string) string {
+	if value == "" {
+		return "/panic"
+	}
+	if !strings.HasPrefix(value, "/") {
+		return "/" + value
+	}
+	return value
 }

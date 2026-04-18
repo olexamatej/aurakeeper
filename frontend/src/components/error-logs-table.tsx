@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   AlertCircle,
@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ErrorLogDetail } from "@/components/error-log-detail"
+import { ExampleRunner } from "@/components/example-runner"
 import { listErrorLogs } from "@/lib/api"
 import type { ErrorLog, ErrorLogState, ErrorLevel, StoredProject } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -134,6 +135,9 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
     queryFn: () => listErrorLogs(project.token),
     refetchInterval: 10_000,
   })
+  const handleRunSettled = useCallback(() => {
+    void refetch()
+  }, [refetch])
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -156,6 +160,8 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
           Refresh
         </Button>
       </div>
+
+      <ExampleRunner project={project} onRunSettled={handleRunSettled} />
 
       {isLoading ? (
         <div className="space-y-3 p-6">

@@ -1,42 +1,39 @@
 # JavaScript Connector Examples
 
-These examples show the recommended setup for the generic JavaScript connector
-in browser and Node.js runtimes.
+## Node.js runtime error
 
-## Files
-
-- [`browser/index.html`](./browser/index.html): browser demo page
-- [`browser/app.js`](./browser/app.js): browser connector setup
-- [`node/index.js`](./node/index.js): Node.js connector setup
-
-## Browser
-
-Open [`browser/index.html`](./browser/index.html) in a browser after replacing
-the placeholder AuraKeeper endpoint and API token in
-[`browser/app.js`](./browser/app.js).
-
-The browser example:
-
-- Installs automatic `error` and `unhandledrejection` handlers
-- Captures handled exceptions manually
-- Adds request, user, session, and tag context from the page
-
-## Node.js
-
-Run the Node.js example from this directory:
+Run the Node example from this directory:
 
 ```sh
-node node/index.js
+AURAKEEPER_API_TOKEN=your-token \
+  node node/index.js
 ```
 
-Set these variables before running it against a real AuraKeeper environment:
+Optional:
 
-- `AURAKEEPER_ENDPOINT`
-- `AURAKEEPER_API_TOKEN`
-- `NODE_ENV`
+```sh
+AURAKEEPER_ENDPOINT=http://127.0.0.1:3000/v1/logs/errors \
+  AURAKEEPER_API_TOKEN=your-token \
+  node node/index.js
+```
 
-The Node.js example:
+The script installs the connector, triggers an uncaught exception, and lets the
+connector drain before the process exits.
 
-- Installs automatic `uncaughtException` and `unhandledRejection` handlers
-- Captures a handled error from an async job
-- Flushes in-flight requests before process shutdown
+## Browser demo
+
+Serve the folder and open the HTML file:
+
+```sh
+python3 -m http.server 8000
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/browser/index.html
+```
+
+Set `window.AURAKEEPER_API_TOKEN` in the page before using the buttons. The
+browser example installs automatic `error` and `unhandledrejection` handlers
+and can capture handled exceptions manually.
