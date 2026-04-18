@@ -1,24 +1,59 @@
 # AuraKeeper
 
-AuraKeeper captures application errors, preserves the runtime and repository
-context needed to investigate them, and runs a verified repair workflow against
-the affected codebase.
+AuraKeeper is an agent-driven runtime repair tool that uses the CLI to set up
+runtime error hooks in existing projects, captures application errors,
+reproduces them in isolated workspaces, generates minimal fixes, verifies and
+tests them, and promotes verified patches back to the target repository.
 
-The platform is designed for teams that want more than error reporting.
-AuraKeeper stores structured failures, imports upstream incidents, prepares
-evidence-rich repair attempts, and keeps verification as the release gate.
+It combines CLI-based onboarding, frontend monitoring, multi-agent repair
+orchestration, local or Docker sandboxing, configurable promotion modes, and
+connector support across multiple stacks so the full error-to-fix workflow can
+run in one system.
 
 ## What It Does
 
-- accepts structured error events from local development and production-style
-  runtimes
-- provisions per-project ingestion tokens and repair settings
-- imports issues from Sentry into the normalized error log pipeline
-- persists repair attempts, reports, and downloadable artifacts
-- runs repository-aware verification orchestration with Replicator, Worker, and
-  Tester agent roles
-- supports local and Docker-backed repair execution policies
-- includes connector SDKs and runnable examples across multiple stacks
+AuraKeeper connects the pieces needed to move from a runtime failure to a
+verified code change:
+
+- **Project onboarding:** `aurakeeper hook` inspects an existing repository and
+  sets up the runtime error capture needed for that project. `aurakeeper local`
+  can run the local AuraKeeper backend, provision project credentials, and pass
+  those credentials into a development command.
+- **Error ingestion:** applications send structured runtime errors with service
+  metadata, stack traces, runtime details, request context, user context, and
+  arbitrary debugging data. AuraKeeper can also import upstream incidents from
+  Sentry into the same normalized error log pipeline.
+- **Frontend monitoring:** the UI lets you create or select projects, configure
+  repair targets, inspect ingested errors, track state changes, start manual
+  repairs, and review previous repair attempts and artifacts.
+- **Automated repair orchestration:** when `autoTrigger` is enabled and a
+  checkout path is configured, new errors can queue the repair flow
+  automatically. The orchestrator gathers repository context and runs the
+  staged pipeline from backend selection through replication, patching,
+  verification, testing, promotion, and completion.
+- **Agent roles:** the Replicator reproduces the failure and narrows the likely
+  cause, the Worker creates the smallest safe patch, and the Tester reviews
+  verification output and regression risk before the repair can pass.
+- **Sandboxed verification:** repair work runs in isolated local or Docker
+  workspaces. Production, hosted, or untrusted contexts prefer Docker, while
+  trusted local projects can use local execution when allowed by policy.
+- **Patch promotion:** verified patches can be applied back to the original
+  checkout automatically, or kept pending for manual review and apply.
+- **Artifacts and examples:** repair attempts persist reports, patches,
+  verification output, and downloadable artifacts. Connector SDKs and runnable
+  examples cover CLI, JavaScript, Next.js, React Native, Python, Go, JVM, .NET,
+  Ruby, and PHP.
+
+## End-to-End Flow
+
+1. Run `aurakeeper hook` in an existing project to install runtime error capture.
+2. Run `aurakeeper local` or `./run-local.sh` to start AuraKeeper locally.
+3. Create or select a project in the frontend and configure its repair target.
+4. Trigger a runtime error from the app or a connector example.
+5. AuraKeeper ingests the error, queues a repair, and runs the agent pipeline:
+   `backend_selection -> context -> replicator -> worker -> verification -> tester -> promotion -> complete`.
+6. Review the patch, verification output, reports, and artifacts in the UI.
+7. Promote the verified patch automatically or apply it manually.
 
 ## Architecture
 
@@ -52,7 +87,9 @@ Current API surface includes:
 - `POST /v1/logs/errors`
 - `POST /v1/sources/sentry`
 - `POST /v1/sources/sentry/{sourceId}/poll`
+- `POST /v1/logs/errors/{logId}/repair-attempts`
 - `GET /v1/logs/errors/{logId}/repair-attempts`
+- `POST /v1/logs/errors/{logId}/repair-attempts/{repairAttemptId}/apply`
 - `GET /v1/logs/errors/{logId}/artifacts/{artifactId}`
 
 Structured error events support service metadata, runtime details, normalized
