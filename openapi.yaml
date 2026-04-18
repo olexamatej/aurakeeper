@@ -2,25 +2,74 @@ openapi: 3.1.0
 info:
   title: Error Logging API
   version: 1.0.0
-  summary: Token-protected API for ingesting application errors from any platform.
+  summary: Project-based API for provisioning tokens and ingesting application errors.
   description: >
-    A platform-agnostic error logging API that accepts structured error events from
-    web, backend, mobile, CLI, or worker runtimes. The payload is intentionally
-    flexible so callers can attach runtime-specific details from environments such
-    as Next.js, Python, Node.js, or other systems.
+    A platform-agnostic error logging API that provisions per-project API tokens
+    and accepts structured error events from web, backend, mobile, CLI, or worker
+    runtimes. The payload is intentionally flexible so callers can attach
+    runtime-specific details from environments such as Next.js, Python, Node.js,
+    or other systems.
 
 servers:
   - url: https://api.example.com
     description: Production
 
-security:
-  - apiTokenAuth: []
-
 tags:
+  - name: Projects
+    description: Create projects and issue ingestion tokens.
   - name: Error Logs
     description: Submit structured error events.
 
 paths:
+  /v1/projects:
+    post:
+      tags:
+        - Projects
+      operationId: createProject
+      summary: Create a project
+      description: >
+        Creates a new project and returns the long-lived API token that should be
+        used when sending error logs for that project.
+      security:
+        - adminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+            example:
+              name: aura-web
+      responses:
+        '201':
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectCreated'
+              example:
+                id: proj_01HSV70H854RZ8B4C2Q5QF6X5A
+                name: aura-web
+                token: ak_95f20e153965417ba49d7d88c240b4fb4fbc2f63fcc74291
+                createdAt: "2026-04-18T08:30:00Z"
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid_request
+                message: body.name must be a non-empty string
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: unauthorized
+                message: Admin token is missing or invalid
   /v1/logs/errors:
     post:
       tags:
@@ -139,13 +188,53 @@ paths:
 
 components:
   securitySchemes:
+    adminTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Admin-Token
+      description: Administrative token used to create new projects.
     apiTokenAuth:
       type: apiKey
       in: header
       name: X-API-Token
-      description: Long-lived API token permanently issued by the backend.
+      description: Long-lived API token permanently issued for a specific project.
 
   schemas:
+    CreateProjectRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Human-readable project name.
+          examples:
+            - aura-web
+            - aura-api
+
+    ProjectCreated:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - token
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: Server-generated project identifier.
+        name:
+          type: string
+          description: Human-readable project name.
+        token:
+          type: string
+          description: Project token to include in the X-API-Token header for log ingestion.
+        createdAt:
+          type: string
+          format: date-time
+
     ErrorLogRequest:
       type: object
       additionalProperties: false
