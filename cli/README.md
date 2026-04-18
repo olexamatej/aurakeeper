@@ -78,7 +78,8 @@ The command:
 - starts the repository's local backend on `http://127.0.0.1:3000` by default
 - provisions or refreshes a local project with `repair.autoTrigger: true`
 - writes reusable local credentials to `.aurakeeper/local.env`
-- injects `AURAKEEPER_ENDPOINT` and `AURAKEEPER_API_TOKEN` into the forwarded
-  dev command when you pass one after `--`
+- updates the project `.env` so AuraKeeper variables point at the local server
+- injects the detected AuraKeeper env variables into the forwarded dev command
+  when you pass one after `--`
 
 Use `--port <number>` to bind the local backend to a different port.

@@ -22,6 +22,17 @@ export type HookDetection = {
   evidence: string[];
 };
 
+const AURAKEEPER_ENV_VARIABLES = [
+  "AURAKEEPER_ENDPOINT",
+  "AURAKEEPER_API_TOKEN",
+  "EXPO_PUBLIC_AURAKEEPER_ENDPOINT",
+  "EXPO_PUBLIC_AURAKEEPER_API_TOKEN",
+  "NEXT_PUBLIC_AURAKEEPER_ENDPOINT",
+  "NEXT_PUBLIC_AURAKEEPER_API_TOKEN",
+  "VITE_AURAKEEPER_ENDPOINT",
+  "VITE_AURAKEEPER_API_TOKEN",
+] as const;
+
 const HOOK_MARKERS = [
   "AURAKEEPER_ENDPOINT",
   "AURAKEEPER_API_TOKEN",
@@ -181,6 +192,40 @@ export async function detectAuraKeeperHook(cwd: string): Promise<HookDetection> 
     installed: evidence.size > 0,
     evidence: Array.from(evidence).slice(0, 10),
   };
+}
+
+export async function detectAuraKeeperEnvVariables(cwd: string): Promise<string[]> {
+  const envVariables = new Set<string>([
+    "AURAKEEPER_ENDPOINT",
+    "AURAKEEPER_API_TOKEN",
+  ]);
+  const filesToScan: string[] = [];
+
+  for (const relativeDir of HOOK_SCAN_DIRECTORIES) {
+    await collectFilesForHookScan(cwd, relativeDir, filesToScan);
+
+    if (filesToScan.length >= MAX_HOOK_SCAN_FILES) {
+      break;
+    }
+  }
+
+  for (const relativePath of filesToScan) {
+    let contents: string;
+
+    try {
+      contents = await readFile(join(cwd, relativePath), "utf8");
+    } catch {
+      continue;
+    }
+
+    for (const variableName of AURAKEEPER_ENV_VARIABLES) {
+      if (contents.includes(variableName)) {
+        envVariables.add(variableName);
+      }
+    }
+  }
+
+  return Array.from(envVariables);
 }
 
 async function detectPackageManager(cwd: string): Promise<string | undefined> {
