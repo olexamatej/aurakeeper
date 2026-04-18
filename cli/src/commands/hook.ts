@@ -19,6 +19,12 @@ type HookPreference = "auto" | "template" | "project_specific";
 type HookProvider = "aurakeeper" | "sentry";
 const NOTE_WRAP_WIDTH = 88;
 
+export type RunHookCommandOptions = {
+  providerOverride?: HookProvider;
+  introText?: string;
+  outroText?: string;
+};
+
 function splitLongToken(token: string, width: number): string[] {
   if (token.length <= width) {
     return [token];
@@ -217,10 +223,13 @@ function buildPrompt(input: {
   ].join("\n");
 }
 
-export async function runHookCommand(): Promise<void> {
-  const providerArg = parseProviderArg(process.argv.slice(3));
+export async function runHookCommand(
+  options: RunHookCommandOptions = {}
+): Promise<void> {
+  const providerArg =
+    options.providerOverride ?? parseProviderArg(process.argv.slice(3));
 
-  intro("AuraKeeper hook");
+  intro(options.introText ?? "AuraKeeper hook");
 
   const cwd = process.cwd();
   const inspection = await inspectProject(cwd);
@@ -406,7 +415,7 @@ export async function runHookCommand(): Promise<void> {
       note(formatNoteBlock(result.nextSteps.map((step) => `- ${step}`)), "Next steps");
     }
 
-    outro("AuraKeeper hook installed.");
+    outro(options.outroText ?? "AuraKeeper hook installed.");
   } catch (error) {
     installSpinner.stop("Hook agent failed");
     throw error;

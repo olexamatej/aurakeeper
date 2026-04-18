@@ -136,6 +136,10 @@ Current command surface:
   TUI with `@clack/prompts`, and then runs a Codex-backed agent in that
   directory to add either an AuraKeeper hook or a Sentry-based hook using
   either a premade pattern or a project-specific implementation.
+- `aurakeeper local` checks whether the current project already has an
+  AuraKeeper hook, offers to install it when missing, starts the local backend,
+  provisions a project token that auto-triggers local repairs, and can forward
+  those credentials into a dev command such as `aurakeeper local -- npm run dev`.
 
 ## Connector Examples
 

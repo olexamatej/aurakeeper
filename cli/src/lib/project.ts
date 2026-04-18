@@ -1,5 +1,5 @@
-import { access, readFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { access, readFile, readdir } from "node:fs/promises";
+import { constants, type Dirent } from "node:fs";
 import { basename, join } from "node:path";
 
 type Detection = {
@@ -17,6 +17,48 @@ export type ProjectInspection = {
   detections: Detection[];
 };
 
+export type HookDetection = {
+  installed: boolean;
+  evidence: string[];
+};
+
+const HOOK_MARKERS = [
+  "AURAKEEPER_ENDPOINT",
+  "AURAKEEPER_API_TOKEN",
+  "createAuraKeeper",
+  "@aurakeeper/",
+  "AuraKeeper.createAuraKeeper",
+] as const;
+
+const HOOK_SCAN_DIRECTORIES = ["."] as const;
+
+const HOOK_SCAN_EXTENSIONS = new Set([
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".mjs",
+  ".cjs",
+  ".mts",
+  ".cts",
+  ".json",
+  ".env",
+  ".yaml",
+  ".yml",
+]);
+
+const HOOK_SCAN_IGNORE = new Set([
+  ".git",
+  ".next",
+  ".turbo",
+  ".vercel",
+  "coverage",
+  "dist",
+  "build",
+  "node_modules",
+]);
+const MAX_HOOK_SCAN_FILES = 200;
+
 async function fileExists(path: string): Promise<boolean> {
   try {
     await access(path, constants.F_OK);
@@ -32,6 +74,113 @@ async function readJson<T>(path: string): Promise<T | undefined> {
   } catch {
     return undefined;
   }
+}
+
+function hasSupportedExtension(fileName: string): boolean {
+  for (const extension of HOOK_SCAN_EXTENSIONS) {
+    if (fileName.endsWith(extension)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function collectFilesForHookScan(
+  cwd: string,
+  relativeDir: string,
+  files: string[]
+): Promise<void> {
+  if (files.length >= MAX_HOOK_SCAN_FILES) {
+    return;
+  }
+
+  const absoluteDir = join(cwd, relativeDir);
+  let entries: Dirent<string>[];
+
+  try {
+    entries = await readdir(absoluteDir, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (files.length >= MAX_HOOK_SCAN_FILES) {
+      return;
+    }
+
+    const nextRelativePath =
+      relativeDir === "." ? entry.name : join(relativeDir, entry.name);
+
+    if (entry.isDirectory()) {
+      if (HOOK_SCAN_IGNORE.has(entry.name)) {
+        continue;
+      }
+
+      await collectFilesForHookScan(cwd, nextRelativePath, files);
+      continue;
+    }
+
+    if (entry.isFile() && hasSupportedExtension(entry.name)) {
+      files.push(nextRelativePath);
+    }
+  }
+}
+
+export async function detectAuraKeeperHook(cwd: string): Promise<HookDetection> {
+  const evidence = new Set<string>();
+  const packageJson = await readJson<{
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  }>(join(cwd, "package.json"));
+
+  const dependencies = {
+    ...packageJson?.dependencies,
+    ...packageJson?.devDependencies,
+  };
+
+  for (const dependencyName of Object.keys(dependencies)) {
+    if (
+      dependencyName.startsWith("@aurakeeper/") ||
+      dependencyName === "aurakeeper"
+    ) {
+      evidence.add(`package.json dependency: ${dependencyName}`);
+    }
+  }
+
+  const filesToScan: string[] = [];
+
+  for (const relativeDir of HOOK_SCAN_DIRECTORIES) {
+    await collectFilesForHookScan(cwd, relativeDir, filesToScan);
+
+    if (filesToScan.length >= MAX_HOOK_SCAN_FILES) {
+      break;
+    }
+  }
+
+  for (const relativePath of filesToScan) {
+    let contents: string;
+
+    try {
+      contents = await readFile(join(cwd, relativePath), "utf8");
+    } catch {
+      continue;
+    }
+
+    const marker = HOOK_MARKERS.find((candidate) => contents.includes(candidate));
+
+    if (marker) {
+      evidence.add(`${relativePath}: ${marker}`);
+    }
+  }
+
+  return {
+    installed: evidence.size > 0,
+    evidence: Array.from(evidence).slice(0, 10),
+  };
 }
 
 async function detectPackageManager(cwd: string): Promise<string | undefined> {

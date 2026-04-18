@@ -8,6 +8,7 @@ function usage(): string {
     "",
     "Commands:",
     "  hook    Add an AuraKeeper or Sentry hook to the current project using an agent",
+    "  local   Start a local AuraKeeper backend for the current project and auto-repair local hook errors",
   ].join("\n");
 }
 
