@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { app } from "./app";
 import { db } from "./db";
-import { projects } from "./schema";
+import { errorLogs, projects } from "./schema";
 
 describe("CORS handling", () => {
   test("responds to preflight requests for allowed origins", async () => {
@@ -142,6 +142,101 @@ describe("project updates", () => {
 
       expect(body.repair).toBeUndefined();
     } finally {
+      db.delete(projects).where(eq(projects.id, projectId)).run();
+    }
+  });
+});
+
+describe("project API token authentication", () => {
+  test("accepts bearer authorization for ingesting an error log", async () => {
+    const suffix = `${Date.now().toString(36)}${crypto.randomUUID().slice(0, 8)}`;
+    const projectId = `proj_auth_post_${suffix}`;
+    const projectToken = `ak_${crypto.randomUUID().replaceAll("-", "")}`;
+
+    try {
+      db.insert(projects)
+        .values({
+          id: projectId,
+          name: "Aura Auth Post",
+          token: projectToken,
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+
+      const response = await app.fetch(
+        new Request("http://localhost:3000/v1/logs/errors", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${projectToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "web",
+            service: { name: "aura-web" },
+            source: { runtime: "node", language: "typescript" },
+            error: { message: "Cannot read properties of undefined" },
+          }),
+        })
+      );
+
+      expect(response.status).toBe(202);
+    } finally {
+      db.delete(errorLogs).where(eq(errorLogs.projectId, projectId)).run();
+      db.delete(projects).where(eq(projects.id, projectId)).run();
+    }
+  });
+
+  test("accepts bearer authorization for listing error logs", async () => {
+    const suffix = `${Date.now().toString(36)}${crypto.randomUUID().slice(0, 8)}`;
+    const projectId = `proj_auth_get_${suffix}`;
+    const projectToken = `ak_${crypto.randomUUID().replaceAll("-", "")}`;
+
+    try {
+      db.insert(projects)
+        .values({
+          id: projectId,
+          name: "Aura Auth Get",
+          token: projectToken,
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+
+      const ingestResponse = await app.fetch(
+        new Request("http://localhost:3000/v1/logs/errors", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Token": projectToken,
+          },
+          body: JSON.stringify({
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "web",
+            service: { name: "aura-web" },
+            source: { runtime: "node", language: "typescript" },
+            error: { message: "Cannot read properties of undefined" },
+          }),
+        })
+      );
+
+      expect(ingestResponse.status).toBe(202);
+
+      const response = await app.fetch(
+        new Request("http://localhost:3000/v1/logs/errors", {
+          headers: {
+            Authorization: `Bearer ${projectToken}`,
+          },
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json() as Array<{ error?: { message?: string } }>;
+      expect(body).toHaveLength(1);
+      expect(body[0]?.error?.message).toBe("Cannot read properties of undefined");
+    } finally {
+      db.delete(errorLogs).where(eq(errorLogs.projectId, projectId)).run();
       db.delete(projects).where(eq(projects.id, projectId)).run();
     }
   });

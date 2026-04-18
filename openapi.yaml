@@ -254,6 +254,7 @@ paths:
         ordered by most recently created first.
       security:
         - apiTokenAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Error logs for the authenticated project
@@ -308,6 +309,7 @@ paths:
         attributes, and arbitrary structured details supplied by the client.
       security:
         - apiTokenAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -426,6 +428,7 @@ paths:
         project.
       security:
         - apiTokenAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -501,6 +504,7 @@ paths:
         and stores any newly imported events as normal error logs.
       security:
         - apiTokenAuth: []
+        - bearerAuth: []
       parameters:
         - name: sourceId
           in: path
@@ -561,6 +565,7 @@ paths:
         using the authenticated project's configured repair target.
       security:
         - apiTokenAuth: []
+        - bearerAuth: []
       parameters:
         - name: logId
           in: path
@@ -608,6 +613,7 @@ paths:
         error log owned by the authenticated project.
       security:
         - apiTokenAuth: []
+        - bearerAuth: []
       parameters:
         - name: logId
           in: path
@@ -646,6 +652,7 @@ paths:
         patch, for a repair attempt linked to a specific error log.
       security:
         - apiTokenAuth: []
+        - bearerAuth: []
       parameters:
         - name: logId
           in: path
@@ -690,6 +697,11 @@ components:
       in: header
       name: X-API-Token
       description: Long-lived API token permanently issued for a specific project.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API token
+      description: Project API token sent as `Authorization: Bearer <token>`.
 
   schemas:
     CreateProjectRequest:
@@ -724,7 +736,7 @@ components:
           description: Human-readable project name.
         token:
           type: string
-          description: Project token to include in the X-API-Token header for log ingestion.
+          description: Project token to include in the X-API-Token header or Authorization Bearer header for log ingestion.
         repair:
           $ref: '#/components/schemas/ProjectRepairSettings'
         createdAt:
