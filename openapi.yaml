@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Error Logging API
   version: 1.0.0
-  summary: Bearer-protected API for ingesting application errors from any platform.
+  summary: Token-protected API for ingesting application errors from any platform.
   description: >
     A platform-agnostic error logging API that accepts structured error events from
     web, backend, mobile, CLI, or worker runtimes. The payload is intentionally
@@ -14,7 +14,7 @@ servers:
     description: Production
 
 security:
-  - bearerAuth: []
+  - apiTokenAuth: []
 
 tags:
   - name: Error Logs
@@ -31,7 +31,7 @@ paths:
         Accepts a single error event with platform metadata, normalized error
         attributes, and arbitrary structured details supplied by the client.
       security:
-        - bearerAuth: []
+        - apiTokenAuth: []
       requestBody:
         required: true
         content:
@@ -128,21 +128,22 @@ paths:
                 error: invalid_request
                 message: occurredAt must be a valid RFC 3339 timestamp
         '401':
-          description: Missing or invalid bearer token
+          description: Missing or invalid API token
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
               example:
                 error: unauthorized
-                message: Bearer token is missing or invalid
+                message: API token is missing or invalid
 
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    apiTokenAuth:
+      type: apiKey
+      in: header
+      name: X-API-Token
+      description: Long-lived API token permanently issued by the backend.
 
   schemas:
     ErrorLogRequest:
