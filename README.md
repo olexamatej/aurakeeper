@@ -57,6 +57,18 @@ identifies the smallest safe fix, and changes the least amount of LOC needed.
 It should prefer targeted patches over broad refactors and return verification
 evidence with every repair attempt.
 
+The Orchestrator is the deterministic controller around those agents. It gathers
+repository context, project instructions, OpenAPI contracts, repair config, and
+stack-relevant files; chooses Docker or local execution from policy; calls the
+Replicator, Worker, and Tester agents in order; runs the verification runner on
+the Worker patch in an isolated workspace; and writes the final repair report.
+The verification runner is the hard gate: if verification blocks the patch, the
+orchestrator must not allow the repair even if an agent says it is safe. The
+backend implementation lives in
+[`backend/src/verification/orchestrator.ts`](./backend/src/verification/orchestrator.ts)
+and uses an injectable agent client so different agent runtimes can be plugged in
+without changing the orchestration policy.
+
 ## MVP
 
 Build the MVP around one language and one repo workflow before expanding.

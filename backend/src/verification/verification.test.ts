@@ -3,7 +3,17 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { selectExecutionBackend } from "./orchestrator";
+import {
+  orchestrateRepair,
+  selectExecutionBackend,
+  type AgentResult,
+  type AgentTask,
+  type RepairAgentClient,
+  type ReplicatorAgentOutput,
+  type TesterAgentInput,
+  type TesterAgentOutput,
+  type WorkerAgentOutput,
+} from "./orchestrator";
 import { nodeProfile } from "./profiles";
 import { applyWorkerPatch, cleanupWorkspace, createArtifactsDir, prepareWorkspace } from "./workspace";
 
@@ -152,6 +162,120 @@ describe("local workspace safety", () => {
         ...workspace,
         keepWorkspace: false,
       });
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+      await rm(artifactsDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("repair orchestration", () => {
+  test("calls repair agents in order and verifies the worker patch in a sandbox", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-source-"));
+    const artifactsDir = await createArtifactsDir();
+    const calls: string[] = [];
+    const patch = `diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-old
++new
+`;
+    const agentClient: RepairAgentClient = {
+      async run<TInput, TOutput>(
+        task: AgentTask<TInput>
+      ): Promise<AgentResult<TOutput>> {
+        calls.push(task.role);
+
+        if (task.role === "replicator") {
+          const output: ReplicatorAgentOutput = {
+            status: "reproduced",
+            handoff: "value.txt still contains old",
+            tldr: "value is stale",
+            likelyCause: "constant was not updated",
+            reproductionCommands: ['test "$(cat value.txt)" = "new"'],
+          };
+
+          return { output: output as TOutput };
+        }
+
+        if (task.role === "worker") {
+          const output: WorkerAgentOutput = {
+            status: "patched",
+            issueSummary: "replace stale value",
+            suspectedRootCause: "value.txt contains the old value",
+            filesChanged: ["value.txt"],
+            locChanged: 1,
+            patch,
+          };
+
+          return { output: output as TOutput };
+        }
+
+        const input = task.input as TesterAgentInput;
+        const output: TesterAgentOutput = {
+          status: input.verificationReport.status,
+          prGate: input.verificationReport.prGate,
+          originalIssueVerification: "targeted command passed after patch",
+          regressionSummary: "configured checks passed",
+          commandsReviewed: input.verificationReport.commands.map((command) => command.id),
+          skippedSuites: input.verificationReport.suitesSkipped,
+          artifactsReviewed: [input.verificationReport.artifactsDir ?? ""],
+          confidence: "high",
+        };
+
+        return { output: output as TOutput };
+      },
+    };
+
+    try {
+      await writeFile(join(sourcePath, "value.txt"), "old\n");
+
+      const report = await orchestrateRepair(
+        {
+          repairAttemptId: "attempt_orchestrator_test",
+          repository: {
+            checkoutPath: sourcePath,
+          },
+          error: {
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "backend",
+            service: {
+              name: "fixture",
+            },
+            source: {
+              runtime: "node",
+              language: "javascript",
+            },
+            error: {
+              message: "expected new value",
+              stack: "Error: expected new value\n    at readValue (value.txt:1:1)",
+            },
+          },
+          backend: "local",
+          environment: "local",
+          trustLevel: "trusted",
+          dockerAvailable: false,
+          suites: ["targeted"],
+          artifactsDir,
+          config: {
+            profiles: ["generic"],
+            commands: {
+              targeted: ['test "$(cat value.txt)" = "new"'],
+            },
+          },
+        },
+        agentClient
+      );
+
+      expect(calls).toEqual(["replicator", "worker", "tester"]);
+      expect(report.status).toBe("passed");
+      expect(report.prGate).toBe("allow");
+      expect(report.stage).toBe("complete");
+      expect(report.verification?.patchApplied).toBe(true);
+      expect(report.codebaseContextPath).toBeTruthy();
+      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
       await rm(artifactsDir, { recursive: true, force: true });
