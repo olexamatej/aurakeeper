@@ -69,3 +69,27 @@ export interface ErrorLog {
   error: ErrorPayload
   context?: ErrorContext
 }
+
+export interface ExampleDefinition {
+  id: string
+  name: string
+  description: string
+  manual?: string
+}
+
+export type ExampleRunStatus = "running" | "completed" | "failed"
+
+export interface ExampleRun {
+  id: string
+  exampleId: string
+  status: ExampleRunStatus
+  startedAt: string
+  finishedAt?: string
+  exitCode?: number | null
+  signal?: string | null
+  triggerStatus?: number
+  stdout: string
+  stderr: string
+  error?: string
+  manual?: string
+}
