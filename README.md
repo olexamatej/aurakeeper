@@ -111,6 +111,18 @@ Initial SDKs:
 - .NET in [`connectors/dotnet`](./connectors/dotnet)
 - Ruby in [`connectors/ruby`](./connectors/ruby)
 
+## Product CLI
+
+The installable AuraKeeper product CLI lives in [`cli`](./cli). It is separate
+from the runtime-focused Node.js connector in [`connectors/cli`](./connectors/cli).
+
+Current command surface:
+
+- `aurakeeper hook` inspects the current repository, opens a small interactive
+  TUI with `@clack/prompts`, and then runs a Codex-backed agent in that
+  directory to add an AuraKeeper hook using either a premade pattern or a
+  project-specific implementation.
+
 ## Connector Examples
 
 Each connector has a small runtime-error example under its `examples/` directory.
