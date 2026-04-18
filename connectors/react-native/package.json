@@ -1,0 +1,9 @@
+{
+  "name": "@aurakeeper/react-native-connector",
+  "version": "0.1.0",
+  "description": "React Native connector for sending mobile application errors to AuraKeeper.",
+  "main": "./aurakeeper.js",
+  "react-native": "./aurakeeper.js",
+  "type": "commonjs",
+  "license": "UNLICENSED"
+}

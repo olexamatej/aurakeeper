@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>AuraKeeper</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>AuraKeeper</Authors>
+    <Description>Minimal .NET connector for sending AuraKeeper error events.</Description>
+    <PackageTags>aurakeeper;monitoring;errors;logging</PackageTags>
+  </PropertyGroup>
+</Project>
