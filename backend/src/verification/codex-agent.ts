@@ -218,6 +218,19 @@ function outputSchemaForRole(role: AgentRole): Record<string, unknown> {
 
 function buildPrompt<TInput>(task: AgentTask<TInput>): string {
   const roleName = `${task.role[0]?.toUpperCase() ?? ""}${task.role.slice(1)}`;
+  const browser = task.capabilities?.browser;
+  const capabilityNotes = browser
+    ? [
+        "Runtime Capability Notes:",
+        "- Browser automation is exposed as a shell command, not as a built-in Codex tool.",
+        `- Run \`${browser.command}\` from the terminal when you need browser automation.`,
+        browser.targetUrl
+          ? `- Start with \`${browser.command} open ${browser.targetUrl}\`, then inspect refs with \`${browser.command} snapshot -i --json\`.`
+          : `- Start with \`${browser.command} open <url>\`, then inspect refs with \`${browser.command} snapshot -i --json\`.`,
+        `- Save required screenshots with \`${browser.command} screenshot <path>\` into ${browser.screenshotDir}.`,
+        "",
+      ]
+    : [];
 
   return [
     `You are AuraKeeper's ${roleName} agent, running through the Codex CLI.`,
@@ -226,6 +239,7 @@ function buildPrompt<TInput>(task: AgentTask<TInput>): string {
     "Return only a JSON object that matches the provided output schema.",
     "Important: include every schema field. Use null for unavailable scalar values and [] for unavailable arrays.",
     "",
+    ...capabilityNotes,
     "Role Instructions:",
     "```markdown",
     escapeFence(task.prompt.content),

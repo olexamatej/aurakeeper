@@ -12,6 +12,7 @@ import {
   type RepairCoordinator,
 } from "./repair-service";
 import {
+  applyStoredRepairAttemptPatch,
   listRepairAttemptsForErrorLog,
   readRepairArtifactContent,
 } from "./repair-artifacts";
@@ -107,13 +108,14 @@ function serializeProject(project: typeof projects.$inferSelect) {
     name: project.name,
     token: project.token,
     repair: project.repairCheckoutPath
-      ? {
+        ? {
           checkoutPath: project.repairCheckoutPath,
           repositoryUrl: project.repairRepositoryUrl ?? undefined,
           baseCommit: project.repairBaseCommit ?? undefined,
           backend: project.repairBackend ?? undefined,
           environment: project.repairEnvironment ?? undefined,
           trustLevel: project.repairTrustLevel ?? undefined,
+          promotionMode: (project.repairPromotionMode ?? "auto") as "auto" | "manual",
           autoTrigger: project.repairAutoTrigger,
         }
       : undefined,
@@ -320,6 +322,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
         repairBackend: payload.repair?.backend ?? null,
         repairEnvironment: payload.repair?.environment ?? null,
         repairTrustLevel: payload.repair?.trustLevel ?? null,
+        repairPromotionMode: payload.repair?.promotionMode ?? "auto",
         repairAutoTrigger: payload.repair?.autoTrigger ?? false,
         createdAt,
       })
@@ -379,6 +382,12 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
             : payload.repair === null
               ? null
               : payload.repair.trustLevel ?? null,
+        repairPromotionMode:
+          payload.repair === undefined
+            ? project.repairPromotionMode
+            : payload.repair === null
+              ? "auto"
+              : payload.repair.promotionMode ?? "auto",
         repairAutoTrigger:
           payload.repair === undefined
             ? project.repairAutoTrigger
@@ -495,6 +504,21 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
 
     return listRepairAttemptsForErrorLog(project.id, params.logId);
   })
+  .post(
+    "/v1/logs/errors/:logId/repair-attempts/:repairAttemptId/apply",
+    async ({ request, params }) => {
+      const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+      requireErrorLogForProject(project.id, params.logId);
+
+      return applyStoredRepairAttemptPatch({
+        projectId: project.id,
+        errorLogId: params.logId,
+        repairAttemptId: params.repairAttemptId,
+      }).catch((error) => {
+        throw new ApiError(409, "repair_apply_failed", (error as Error).message);
+      });
+    }
+  )
   .get("/v1/logs/errors/:logId/artifacts/:artifactId", async ({ request, params, set }) => {
     const project = requireProjectByApiToken(getProjectApiToken(request));
     requireErrorLogForProject(project.id, params.logId);

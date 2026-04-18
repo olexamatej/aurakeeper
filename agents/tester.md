@@ -24,9 +24,10 @@ and whether the patch introduced obvious regressions.
 1. Confirm the targeted verification covered the original issue when evidence is
    available.
    When browser automation is supplied, use the patched workspace plus
-   `agent-browser` to load the frontend, replay the user-facing bug, and gather
-   UI evidence such as snapshots, screenshots, or diffs. Save the requested
-   screenshots into the supplied `screenshotDir`.
+   `task.capabilities.browser.command` to load the frontend, replay the
+   user-facing bug, and gather UI evidence such as snapshots, screenshots, or
+   diffs. The browser capability is a shell command, not a built-in Codex tool.
+   Save the requested screenshots into the supplied `screenshotDir`.
 2. Review standard checks such as tests, type checks, lint, and builds.
 3. Review bounded fuzz or smoke results for nearby regressions.
 4. Explain skipped suites and whether they leave meaningful risk.

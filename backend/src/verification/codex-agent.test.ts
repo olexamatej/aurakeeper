@@ -139,4 +139,68 @@ describe("CodexCliAgentClient", () => {
       /Codex CLI exited with code 3/
     );
   });
+
+  test("describes browser automation as a shell command in the prompt", async () => {
+    const task = createTask("tester");
+    task.capabilities = {
+      browser: {
+        provider: "agent-browser",
+        command: "agent-browser",
+        docsUrl: "https://agent-browser.dev/",
+        startupCommand: "pnpm dev -- --hostname 127.0.0.1",
+        startupCwd: "/tmp/repo",
+        targetUrl: "http://127.0.0.1:3000/dashboard",
+        workspacePath: "/tmp/repo",
+        screenshotDir: "/tmp/artifacts",
+        requiredScreenshots: [
+          "tester-browser-before-fix.png",
+          "tester-browser-after-fix.png",
+        ],
+        recommendedWorkflow: [],
+      },
+    };
+
+    const client = new CodexCliAgentClient({
+      codexPath: "/mock/codex",
+      runner: async ({ args, stdin }) => {
+        expect(stdin).toContain("Browser automation is exposed as a shell command");
+        expect(stdin).toContain("Run `agent-browser` from the terminal");
+        expect(stdin).toContain("agent-browser open http://127.0.0.1:3000/dashboard");
+        expect(stdin).toContain("agent-browser screenshot <path>");
+
+        const outputPath = args[args.indexOf("--output-last-message") + 1] as string;
+
+        await writeFile(
+          outputPath,
+          `${JSON.stringify({
+            output: {
+              status: "passed",
+              prGate: "allow",
+              originalIssueVerification: "browser evidence captured",
+              regressionSummary: "no regressions found",
+              commandsReviewed: [],
+              skippedSuites: [],
+              artifactsReviewed: [],
+              confidence: "high",
+              remainingRisk: null,
+            },
+            artifacts: [],
+          })}\n`
+        );
+
+        return {
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+        };
+      },
+    });
+
+    const result = await client.run(task);
+
+    expect(result.output).toMatchObject({
+      status: "passed",
+      prGate: "allow",
+    });
+  });
 });

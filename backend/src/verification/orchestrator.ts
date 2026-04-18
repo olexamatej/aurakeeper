@@ -2,12 +2,18 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
 
 import type { ErrorLogRequest } from "../validation";
 import { checkDockerAvailable } from "./commands";
 import { loadProjectVerificationConfig } from "./project-config";
 import { selectTechnologyProfile } from "./profiles";
-import { createArtifactsDir } from "./workspace";
+import {
+  applyPatchToCheckout,
+  cleanupWorkspace,
+  createArtifactsDir,
+  prepareWorkspace,
+} from "./workspace";
 import type {
   BackendSelectionDecision,
   BackendSelectionInput,
@@ -16,6 +22,7 @@ import type {
   ExecutionBackendId,
   ExecutionBackendPreference,
   ProjectVerificationConfig,
+  RepairPatchPromotionMode,
   TechnologyProfile,
   TrustLevel,
   VerificationEnvironment,
@@ -246,6 +253,7 @@ export type RepairOrchestrationRequest = {
   backend?: ExecutionBackendPreference;
   environment?: VerificationEnvironment;
   trustLevel?: TrustLevel;
+  promotionMode?: RepairPatchPromotionMode;
   config?: ProjectVerificationConfig;
   artifactsDir?: string;
   keepWorkspace?: boolean;
@@ -254,6 +262,7 @@ export type RepairOrchestrationRequest = {
 
 export type RepairOrchestrationOptions = {
   agentPromptDir?: string;
+  browserCommandAvailable?: (command: string) => Promise<boolean>;
   onStageChange?: (update: {
     repairAttemptId: string;
     stage: RepairOrchestrationReport["stage"];
@@ -274,6 +283,7 @@ export type RepairOrchestrationReport = {
     | "worker"
     | "verification"
     | "tester"
+    | "promotion"
     | "complete";
   selectedBackend?: ExecutionBackendId;
   backendReason: string;
@@ -560,6 +570,86 @@ async function browserConfigPath(
   return (await pathExists(discovered)) ? discovered : undefined;
 }
 
+async function defaultBrowserCommandAvailable(command: string): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const child = spawn("sh", ["-lc", `${command} --help >/dev/null 2>&1`], {
+      stdio: "ignore",
+    });
+    const timeout = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve(false);
+    }, 3000);
+
+    child.on("error", () => {
+      clearTimeout(timeout);
+      resolve(false);
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code === 0);
+    });
+  });
+}
+
+function localhostBrowserTarget(targetUrl: string | undefined): "127.0.0.1" | "localhost" | undefined {
+  if (!targetUrl) {
+    return undefined;
+  }
+
+  try {
+    const hostname = new URL(targetUrl).hostname;
+
+    if (hostname === "127.0.0.1" || hostname === "localhost") {
+      return hostname;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function normalizeBrowserStartupCommand(
+  startupCommand: string | undefined,
+  targetUrl: string | undefined
+): string | undefined {
+  if (!startupCommand) {
+    return undefined;
+  }
+
+  const hostname = localhostBrowserTarget(targetUrl);
+
+  if (!hostname) {
+    return startupCommand;
+  }
+
+  const normalized = startupCommand.trim();
+
+  if (
+    normalized.includes("--hostname") ||
+    normalized.includes("--host") ||
+    normalized.startsWith("HOST=")
+  ) {
+    return normalized;
+  }
+
+  if (/(?:^|\s)next\s+dev(?:\s|$)/.test(normalized)) {
+    return `${normalized} --hostname ${hostname}`;
+  }
+
+  if (
+    /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?dev(?:\s|$)/.test(normalized) ||
+    /^(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?start(?:\s|$)/.test(normalized)
+  ) {
+    return normalized.includes(" -- ")
+      ? `${normalized} --hostname ${hostname}`
+      : `${normalized} -- --hostname ${hostname}`;
+  }
+
+  return normalized;
+}
+
 async function browserCapabilityForRole(input: {
   role: BrowserAutomationRole;
   rootPath: string;
@@ -567,6 +657,7 @@ async function browserCapabilityForRole(input: {
   artifactsDir: string;
   error: StructuredErrorEvent;
   config: ProjectVerificationConfig;
+  commandAvailable?: (command: string) => Promise<boolean>;
 }): Promise<BrowserAutomationCapability | undefined> {
   if (input.config.browser?.enabled === false) {
     return undefined;
@@ -581,16 +672,26 @@ async function browserCapabilityForRole(input: {
   }
 
   const targetUrl = browserTargetUrl(input.error, input.config);
+  const command = input.config.browser?.command ?? "agent-browser";
+
+  if (!(await (input.commandAvailable ?? defaultBrowserCommandAvailable)(command))) {
+    return undefined;
+  }
+
+  const startupCommand = normalizeBrowserStartupCommand(
+    input.config.browser?.startupCommand,
+    targetUrl
+  );
 
   return {
     provider: "agent-browser",
-    command: input.config.browser?.command ?? "agent-browser",
+    command,
     docsUrl: AGENT_BROWSER_DOCS_URL,
     configPath: await browserConfigPath(input.rootPath, input.config),
     remoteProvider: input.config.browser?.remoteProvider,
     headed: input.config.browser?.headed,
     sessionName: input.config.browser?.sessionName,
-    startupCommand: input.config.browser?.startupCommand,
+    startupCommand,
     startupCwd: resolve(input.workspacePath, input.config.browser?.startupCwd ?? "."),
     startupTimeoutMs: input.config.browser?.startupTimeoutMs,
     targetUrl,
@@ -604,8 +705,10 @@ async function browserCapabilityForRole(input: {
         ? ["replicator-browser-current.png"]
         : ["tester-browser-before-fix.png", "tester-browser-after-fix.png"],
     recommendedWorkflow: [
+      `The browser capability is a shell command, not a built-in Codex tool. Run \`${command}\` directly from the terminal.`,
       "Start the frontend app if a startupCommand is provided, then wait until the app is reachable.",
-      "Open the target URL with agent-browser, snapshot with refs, interact using refs, and re-snapshot after each meaningful UI change.",
+      `Open the target URL with \`${command} open <url>\`, then inspect refs with \`${command} snapshot -i --json\`.`,
+      `Interact with refs using commands such as \`${command} click @e1\` or \`${command} fill @e2 "text"\`, then re-snapshot after each meaningful UI change.`,
       "Save the required screenshots into screenshotDir using the listed filenames so they are preserved with the run artifacts.",
     ],
   };
@@ -1170,18 +1273,8 @@ export async function orchestrateRepair(
     artifactsDir,
     error: request.error,
     config,
+    commandAvailable: options.browserCommandAvailable,
   });
-  const testerUsesBrowser = Boolean(
-    await browserCapabilityForRole({
-      role: "tester",
-      rootPath: sourceRoot,
-      workspacePath: sourceRoot,
-      artifactsDir,
-      error: request.error,
-      config,
-    })
-  );
-
   await notifyStageChange(options, {
     repairAttemptId,
     stage: "replicator",
@@ -1272,21 +1365,47 @@ export async function orchestrateRepair(
     profileId: profile.id,
   });
 
-  agents.worker = await executeAgent<WorkerAgentInput, WorkerAgentOutput>({
-    role: "worker",
-    prompt: prompts.worker,
-    repairAttemptId,
-    repository: request.repository,
-    codebase,
-    sandbox,
-    artifactsDir,
-    agentClient,
-    agentInput: {
-      error: request.error,
-      issueSummary: request.issueSummary,
-      replicator: agents.replicator.output,
+  const workerWorkspace = await prepareWorkspace({
+    backend: selection.backend,
+    request: {
+      repairAttemptId,
+      repository: request.repository,
     },
+    profile,
+    config,
+    artifactsDir,
   });
+
+  try {
+    const workerRepository = {
+      ...request.repository,
+      checkoutPath: workerWorkspace.workspacePath,
+    };
+    const workerCodebase = await buildCodebaseContext({
+      rootPath: workerWorkspace.workspacePath,
+      projectConfig: config,
+      profile,
+      error: request.error,
+    });
+
+    agents.worker = await executeAgent<WorkerAgentInput, WorkerAgentOutput>({
+      role: "worker",
+      prompt: prompts.worker,
+      repairAttemptId,
+      repository: workerRepository,
+      codebase: workerCodebase,
+      sandbox,
+      artifactsDir,
+      agentClient,
+      agentInput: {
+        error: request.error,
+        issueSummary: request.issueSummary,
+        replicator: agents.replicator.output,
+      },
+    });
+  } finally {
+    await cleanupWorkspace(workerWorkspace);
+  }
 
   if (agents.worker.error || !agents.worker.output) {
     await notifyStageChange(options, {
@@ -1351,11 +1470,10 @@ export async function orchestrateRepair(
     );
   }
 
-  const { runVerification } = await import("./runner");
-  const keepWorkspaceForTester =
-    testerUsesBrowser || request.keepWorkspace || config.local?.keepWorkspace || false;
+  const { runVerification, writeVerificationReports } = await import("./runner");
+  const keepWorkspaceForTester = true;
   const cleanupVerificationWorkspaceAfterTester =
-    testerUsesBrowser && !request.keepWorkspace && !config.local?.keepWorkspace;
+    !request.keepWorkspace && !config.local?.keepWorkspace;
 
   await notifyStageChange(options, {
     repairAttemptId,
@@ -1373,6 +1491,7 @@ export async function orchestrateRepair(
     backend: selection.backend,
     environment,
     trustLevel,
+    promotionMode: request.promotionMode ?? "auto",
     config,
     artifactsDir,
     keepWorkspace: keepWorkspaceForTester,
@@ -1390,9 +1509,21 @@ export async function orchestrateRepair(
     artifactsDir,
     error: request.error,
     config,
+    commandAvailable: options.browserCommandAvailable,
   });
 
   try {
+    const testerRepository = {
+      ...request.repository,
+      checkoutPath: verification.workspacePath ?? sourceRoot,
+    };
+    const testerCodebase = await buildCodebaseContext({
+      rootPath: testerRepository.checkoutPath,
+      projectConfig: config,
+      profile,
+      error: request.error,
+    });
+
     await notifyStageChange(options, {
       repairAttemptId,
       stage: "tester",
@@ -1404,8 +1535,8 @@ export async function orchestrateRepair(
       role: "tester",
       prompt: prompts.tester,
       repairAttemptId,
-      repository: request.repository,
-      codebase,
+      repository: testerRepository,
+      codebase: testerCodebase,
       sandbox,
       capabilities: testerBrowser ? { browser: testerBrowser } : undefined,
       artifactsDir,
@@ -1459,13 +1590,56 @@ export async function orchestrateRepair(
 
     const final = finalStatusFromTester(agents.tester.output, verification);
 
+    if (final.status === "passed" && verification.patchFiles?.original) {
+      if ((request.promotionMode ?? "auto") === "auto") {
+        await notifyStageChange(options, {
+          repairAttemptId,
+          stage: "promotion",
+          detail: "Verification passed. Applying the patch back to the original checkout.",
+          selectedBackend: selection.backend,
+          profileId: profile.id,
+        });
+
+        const sourcePatchResult = await applyPatchToCheckout({
+          checkoutPath: sourceRoot,
+          patchFile: join(artifactsDir, verification.patchFiles.original),
+          timeoutMs: config.limits?.commandTimeoutMs ?? 60_000,
+        });
+
+        if (sourcePatchResult.applied) {
+          verification.sourcePatchStatus = "applied";
+          verification.sourcePatchAppliedAt = new Date().toISOString();
+          verification.sourcePatchError = undefined;
+        } else {
+          verification.sourcePatchStatus = "failed";
+          verification.sourcePatchAppliedAt = undefined;
+          verification.sourcePatchError =
+            sourcePatchResult.error ?? "Failed to apply the verified patch.";
+        }
+      }
+
+      await writeVerificationReports(verification);
+    }
+
+    const finalFailureReason =
+      verification.sourcePatchStatus === "failed"
+        ? verification.sourcePatchError ??
+          "Verification passed, but applying the patch to the original checkout failed."
+        : final.failureReason ?? verification.failureReason;
+    const finalStatus =
+      verification.sourcePatchStatus === "failed" ? "failed" : final.status;
+    const finalPrGate =
+      verification.sourcePatchStatus === "failed" ? "block" : final.prGate;
+
     await notifyStageChange(options, {
       repairAttemptId,
       stage: "complete",
       detail:
-        final.status === "passed"
-          ? "Repair completed and verification passed."
-          : final.failureReason ?? verification.failureReason ?? "Repair completed with failures.",
+        finalStatus === "passed"
+          ? verification.sourcePatchStatus === "pending_manual"
+            ? "Repair completed. The verified patch is ready for manual apply."
+            : "Repair completed and verification passed."
+          : finalFailureReason ?? "Repair completed with failures.",
       selectedBackend: selection.backend,
       profileId: profile.id,
     });
@@ -1473,8 +1647,8 @@ export async function orchestrateRepair(
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
-        status: final.status,
-        prGate: final.prGate,
+        status: finalStatus,
+        prGate: finalPrGate,
         stage: "complete",
         selectedBackend: selection.backend,
         backendReason: selection.reason,
@@ -1486,7 +1660,7 @@ export async function orchestrateRepair(
         agents,
         verification,
         startedAt,
-        failureReason: final.failureReason ?? verification.failureReason,
+        failureReason: finalFailureReason,
       })
     );
   } finally {

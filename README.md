@@ -143,6 +143,22 @@ Current command surface:
   those credentials into the project `.env` and a dev command such as
   `aurakeeper local -- npm run dev`.
 
+## Local App Quickstart
+
+To run the backend and frontend together from the repository root:
+
+```bash
+./run-local.sh
+```
+
+The script:
+
+- ensures Bun and pnpm are available
+- creates missing defaults in `backend/.env` and `frontend/.env`
+- installs backend and frontend dependencies
+- starts backend on `http://127.0.0.1:3000` and frontend on `http://127.0.0.1:5173`
+- stops both services on `Ctrl+C`
+
 ## Connector Examples
 
 Each connector has a small broken mini-project under its `examples/` directory.

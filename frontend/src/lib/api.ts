@@ -137,6 +137,23 @@ export async function startRepairAttempt(
   return handleResponse<RepairAttemptAccepted>(response)
 }
 
+export async function applyRepairAttemptPatch(
+  apiToken: string,
+  logId: string,
+  repairAttemptId: string,
+): Promise<RepairAttempt> {
+  const response = await fetch(
+    `${API_URL}/v1/logs/errors/${logId}/repair-attempts/${repairAttemptId}/apply`,
+    {
+      method: "POST",
+      headers: {
+        "X-API-Token": apiToken,
+      },
+    },
+  )
+  return handleResponse<RepairAttempt>(response)
+}
+
 export function artifactUrl(logId: string, artifactId: string): string {
   return `${API_URL}/v1/logs/errors/${logId}/artifacts/${artifactId}`
 }

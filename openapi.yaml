@@ -51,6 +51,7 @@ paths:
                 backend: local
                 environment: local
                 trustLevel: trusted
+                promotionMode: auto
                 autoTrigger: true
       responses:
         '201':
@@ -68,6 +69,7 @@ paths:
                   backend: local
                   environment: local
                   trustLevel: trusted
+                  promotionMode: auto
                   autoTrigger: true
                 createdAt: "2026-04-18T08:30:00Z"
         '400':
@@ -641,6 +643,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /v1/logs/errors/{logId}/repair-attempts/{repairAttemptId}/apply:
+    post:
+      tags:
+        - Repair Attempts
+      operationId: applyRepairAttemptPatch
+      summary: Apply a verified patch to the original checkout
+      description: >
+        Applies the original-target patch artifact from a previously verified
+        repair attempt back to the configured source checkout. This is primarily
+        used when a project is configured for manual patch promotion after
+        verification.
+      security:
+        - apiTokenAuth: []
+      parameters:
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: repairAttemptId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repair attempt updated after applying the verified patch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairAttempt'
+        '401':
+          description: Missing or invalid API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Error log or repair attempt not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Repair attempt cannot be applied or patch application failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/logs/errors/{logId}/artifacts/{artifactId}:
     get:
       tags:
@@ -788,6 +839,12 @@ components:
           enum:
             - trusted
             - untrusted
+        promotionMode:
+          type: string
+          enum:
+            - auto
+            - manual
+          description: Whether verified patches are auto-applied back to the original checkout or left for manual apply.
         autoTrigger:
           type: boolean
           description: Whether newly accepted error logs should automatically queue a repair attempt.
@@ -1312,6 +1369,25 @@ components:
         selectedBackend:
           type: string
         profileId:
+          type: string
+        targetCheckoutPath:
+          type: string
+        promotionMode:
+          type: string
+          enum:
+            - auto
+            - manual
+        sourcePatchStatus:
+          type: string
+          enum:
+            - not_requested
+            - pending_manual
+            - applied
+            - failed
+        sourcePatchAppliedAt:
+          type: string
+          format: date-time
+        sourcePatchError:
           type: string
         failureReason:
           type: string

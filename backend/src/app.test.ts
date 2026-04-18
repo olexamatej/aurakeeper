@@ -89,6 +89,7 @@ describe("project updates", () => {
           backend?: string;
           environment?: string;
           trustLevel?: string;
+          promotionMode?: string;
           autoTrigger: boolean;
         };
       };
@@ -98,6 +99,7 @@ describe("project updates", () => {
         backend: "local",
         environment: "local",
         trustLevel: "trusted",
+        promotionMode: "auto",
         autoTrigger: true,
       });
     } finally {

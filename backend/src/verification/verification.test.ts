@@ -208,6 +208,67 @@ describe("local workspace safety", () => {
       await rm(artifactsDir, { recursive: true, force: true });
     }
   });
+
+  test("treats an already-applied worker patch in the temp workspace as success", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-source-"));
+    const artifactsDir = await createArtifactsDir();
+
+    try {
+      await mkdir(join(sourcePath, "src"));
+      await writeFile(join(sourcePath, "src", "value.txt"), "old\n");
+
+      const patch = `diff --git a/src/value.txt b/src/value.txt
+--- a/src/value.txt
++++ b/src/value.txt
+@@ -1 +1 @@
+-old
++new
+`;
+      const workspace = await prepareWorkspace({
+        backend: "local",
+        request: {
+          repairAttemptId: "attempt_test_reapply",
+          repository: {
+            checkoutPath: sourcePath,
+          },
+          patch,
+          keepWorkspace: true,
+        },
+        profile: nodeProfile,
+        config: {},
+        artifactsDir,
+      });
+
+      const firstResult = await applyWorkerPatch(workspace, {
+        repairAttemptId: "attempt_test_reapply",
+        repository: {
+          checkoutPath: sourcePath,
+        },
+        patch,
+      });
+      const secondResult = await applyWorkerPatch(workspace, {
+        repairAttemptId: "attempt_test_reapply",
+        repository: {
+          checkoutPath: sourcePath,
+        },
+        patch,
+      });
+
+      expect(firstResult.applied).toBe(true);
+      expect(secondResult.applied).toBe(true);
+      expect(secondResult.error).toBeUndefined();
+      expect(await readFile(join(workspace.workspacePath, "src", "value.txt"), "utf8")).toBe("new\n");
+      expect(await readFile(join(sourcePath, "src", "value.txt"), "utf8")).toBe("old\n");
+
+      await cleanupWorkspace({
+        ...workspace,
+        keepWorkspace: false,
+      });
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+      await rm(artifactsDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("repair orchestration", () => {
@@ -297,6 +358,7 @@ describe("repair orchestration", () => {
           backend: "local",
           environment: "local",
           trustLevel: "trusted",
+          promotionMode: "manual",
           dockerAvailable: false,
           suites: ["targeted"],
           artifactsDir,
@@ -315,8 +377,129 @@ describe("repair orchestration", () => {
       expect(report.prGate).toBe("allow");
       expect(report.stage).toBe("complete");
       expect(report.verification?.patchApplied).toBe(true);
+      expect(report.verification?.sourcePatchStatus).toBe("pending_manual");
       expect(report.codebaseContextPath).toBeTruthy();
       expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+      await rm(artifactsDir, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps worker and tester edits out of the source checkout until manual apply", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-isolated-"));
+    const artifactsDir = await createArtifactsDir();
+    const patch = `diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-old
++new
+`;
+    const seenCheckouts = new Map<string, string>();
+
+    const agentClient: RepairAgentClient = {
+      async run<TInput, TOutput>(
+        task: AgentTask<TInput>
+      ): Promise<AgentResult<TOutput>> {
+        seenCheckouts.set(task.role, task.repository.checkoutPath);
+
+        if (task.role === "replicator") {
+          const output: ReplicatorAgentOutput = {
+            status: "reproduced",
+            handoff: "value.txt still contains old",
+            tldr: "value is stale",
+            likelyCause: "constant was not updated",
+            reproductionCommands: ['test "$(cat value.txt)" = "new"'],
+          };
+
+          return { output: output as TOutput };
+        }
+
+        if (task.role === "worker") {
+          await writeFile(join(task.repository.checkoutPath, "worker-only.txt"), "temp worker file\n");
+
+          const output: WorkerAgentOutput = {
+            status: "patched",
+            issueSummary: "replace stale value",
+            suspectedRootCause: "value.txt contains the old value",
+            filesChanged: ["value.txt"],
+            locChanged: 1,
+            patch,
+          };
+
+          return { output: output as TOutput };
+        }
+
+        await writeFile(join(task.repository.checkoutPath, "tester-only.txt"), "temp tester file\n");
+
+        const input = task.input as TesterAgentInput;
+        const output: TesterAgentOutput = {
+          status: input.verificationReport.status,
+          prGate: input.verificationReport.prGate,
+          originalIssueVerification: "targeted command passed after patch",
+          regressionSummary: "configured checks passed",
+          commandsReviewed: input.verificationReport.commands.map((command) => command.id),
+          skippedSuites: input.verificationReport.suitesSkipped,
+          artifactsReviewed: [input.verificationReport.artifactsDir ?? ""],
+          confidence: "high",
+        };
+
+        return { output: output as TOutput };
+      },
+    };
+
+    try {
+      await writeFile(join(sourcePath, "value.txt"), "old\n");
+
+      const report = await orchestrateRepair(
+        {
+          repairAttemptId: "attempt_orchestrator_isolated",
+          repository: {
+            checkoutPath: sourcePath,
+          },
+          error: {
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "backend",
+            service: {
+              name: "fixture",
+            },
+            source: {
+              runtime: "node",
+              language: "javascript",
+            },
+            error: {
+              message: "expected new value",
+              stack: "Error: expected new value\n    at readValue (value.txt:1:1)",
+            },
+          },
+          backend: "local",
+          environment: "local",
+          trustLevel: "trusted",
+          promotionMode: "manual",
+          dockerAvailable: false,
+          suites: ["targeted"],
+          artifactsDir,
+          config: {
+            profiles: ["generic"],
+            commands: {
+              targeted: ['test "$(cat value.txt)" = "new"'],
+            },
+          },
+        },
+        agentClient
+      );
+
+      expect(report.status).toBe("passed");
+      expect(report.verification?.sourcePatchStatus).toBe("pending_manual");
+      expect(seenCheckouts.get("worker")).toBeDefined();
+      expect(seenCheckouts.get("worker")).not.toBe(sourcePath);
+      expect(seenCheckouts.get("tester")).toBeDefined();
+      expect(seenCheckouts.get("tester")).not.toBe(sourcePath);
+      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
+      await expect(readFile(join(sourcePath, "worker-only.txt"), "utf8")).rejects.toThrow();
+      await expect(readFile(join(sourcePath, "tester-only.txt"), "utf8")).rejects.toThrow();
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
       await rm(artifactsDir, { recursive: true, force: true });
@@ -346,6 +529,7 @@ describe("repair orchestration", () => {
           expect(task.capabilities?.browser).toMatchObject({
             provider: "agent-browser",
             command: "agent-browser",
+            startupCommand: "pnpm dev -- --hostname 127.0.0.1",
             targetUrl: "http://127.0.0.1:3000/dashboard",
             workspacePath: sourcePath,
             screenshotDir: artifactsDir,
@@ -438,6 +622,7 @@ describe("repair orchestration", () => {
           backend: "local",
           environment: "local",
           trustLevel: "trusted",
+          promotionMode: "manual",
           dockerAvailable: false,
           suites: ["targeted"],
           artifactsDir,
@@ -448,18 +633,147 @@ describe("repair orchestration", () => {
             },
             browser: {
               enabled: true,
+              command: "agent-browser",
+              startupCommand: "pnpm dev",
               targetUrl: "http://127.0.0.1:3000/dashboard",
             },
           },
         },
-        agentClient
+        agentClient,
+        {
+          browserCommandAvailable: async (command) => command === "agent-browser",
+        }
       );
 
       expect(calls).toEqual(["replicator", "worker", "tester"]);
       expect(report.status).toBe("passed");
       expect(report.prGate).toBe("allow");
       expect(testerWorkspaceValue).toBe("new\n");
+      expect(report.verification?.sourcePatchStatus).toBe("pending_manual");
       expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+      await rm(artifactsDir, { recursive: true, force: true });
+    }
+  });
+
+  test("skips browser capability when the command is unavailable", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-browser-disabled-source-"));
+    const artifactsDir = await createArtifactsDir();
+    const browserCapabilitySeenByRole = new Map<string, boolean>();
+    const patch = `diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-old
++new
+`;
+
+    const agentClient: RepairAgentClient = {
+      async run<TInput, TOutput>(
+        task: AgentTask<TInput>
+      ): Promise<AgentResult<TOutput>> {
+        browserCapabilitySeenByRole.set(task.role, Boolean(task.capabilities?.browser));
+
+        if (task.role === "replicator") {
+          const output: ReplicatorAgentOutput = {
+            status: "reproduced",
+            handoff: "frontend still shows old value",
+            tldr: "browser path reproduced without browser tooling",
+            likelyCause: "stale value",
+            reproductionCommands: ['test "$(cat value.txt)" = "new"'],
+          };
+
+          return { output: output as TOutput };
+        }
+
+        if (task.role === "worker") {
+          const output: WorkerAgentOutput = {
+            status: "patched",
+            issueSummary: "replace stale value",
+            suspectedRootCause: "value.txt contains the old value",
+            filesChanged: ["value.txt"],
+            locChanged: 1,
+            patch,
+          };
+
+          return { output: output as TOutput };
+        }
+
+        const input = task.input as TesterAgentInput;
+        const output: TesterAgentOutput = {
+          status: input.verificationReport.status,
+          prGate: input.verificationReport.prGate,
+          originalIssueVerification: "standard verification passed",
+          regressionSummary: "configured checks passed",
+          commandsReviewed: input.verificationReport.commands.map((command) => command.id),
+          skippedSuites: input.verificationReport.suitesSkipped,
+          artifactsReviewed: [input.verificationReport.artifactsDir ?? ""],
+          confidence: "high",
+        };
+
+        return { output: output as TOutput };
+      },
+    };
+
+    try {
+      await writeFile(join(sourcePath, "value.txt"), "old\n");
+
+      const report = await orchestrateRepair(
+        {
+          repairAttemptId: "attempt_browser_command_unavailable",
+          repository: {
+            checkoutPath: sourcePath,
+          },
+          error: {
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "web",
+            service: {
+              name: "fixture",
+            },
+            source: {
+              runtime: "browser",
+              language: "typescript",
+              framework: "next.js",
+            },
+            error: {
+              message: "dashboard shows stale value",
+            },
+            context: {
+              request: {
+                url: "http://127.0.0.1:3000/dashboard",
+              },
+            },
+          },
+          backend: "local",
+          environment: "local",
+          trustLevel: "trusted",
+          promotionMode: "manual",
+          dockerAvailable: false,
+          suites: ["targeted"],
+          artifactsDir,
+          config: {
+            profiles: ["generic"],
+            commands: {
+              targeted: ['test "$(cat value.txt)" = "new"'],
+            },
+            browser: {
+              enabled: true,
+              command: "agent-browser",
+              targetUrl: "http://127.0.0.1:3000/dashboard",
+            },
+          },
+        },
+        agentClient,
+        {
+          browserCommandAvailable: async () => false,
+        }
+      );
+
+      expect(report.status).toBe("passed");
+      expect(browserCapabilitySeenByRole.get("replicator")).toBe(false);
+      expect(browserCapabilitySeenByRole.get("tester")).toBe(false);
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
       await rm(artifactsDir, { recursive: true, force: true });
