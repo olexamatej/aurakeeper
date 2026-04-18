@@ -185,10 +185,10 @@ describe("repair coordination", () => {
 
           return logs.find((entry) => entry.id === accepted.id);
         },
-        (value) => value?.state === "verify_succeeded"
+        (value) => value?.state === "deploy_succeeded"
       );
 
-      expect(storedLog?.state).toBe("verify_succeeded");
+      expect(storedLog?.state).toBe("deploy_succeeded");
     } finally {
       db.delete(repairArtifacts)
         .where(eq(repairArtifacts.projectId, projectId))

@@ -167,7 +167,7 @@ describe("project verification config", () => {
 });
 
 describe("local workspace safety", () => {
-  test("applies worker patches only inside the temp workspace", async () => {
+  test("applies worker patches directly in the source checkout", async () => {
     const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-source-"));
     const artifactsDir = await createArtifactsDir();
 
@@ -206,8 +206,9 @@ describe("local workspace safety", () => {
       });
 
       expect(result.applied).toBe(true);
-      expect(await readFile(join(sourcePath, "src", "value.txt"), "utf8")).toBe("old\n");
+      expect(workspace.workspacePath).toBe(sourcePath);
       expect(await readFile(join(workspace.workspacePath, "src", "value.txt"), "utf8")).toBe("new\n");
+      expect(await readFile(join(sourcePath, "src", "value.txt"), "utf8")).toBe("new\n");
 
       await cleanupWorkspace({
         ...workspace,
@@ -219,7 +220,7 @@ describe("local workspace safety", () => {
     }
   });
 
-  test("treats an already-applied worker patch in the temp workspace as success", async () => {
+  test("treats an already-applied worker patch in the source checkout as success", async () => {
     const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-source-"));
     const artifactsDir = await createArtifactsDir();
 
@@ -268,7 +269,7 @@ describe("local workspace safety", () => {
       expect(secondResult.applied).toBe(true);
       expect(secondResult.error).toBeUndefined();
       expect(await readFile(join(workspace.workspacePath, "src", "value.txt"), "utf8")).toBe("new\n");
-      expect(await readFile(join(sourcePath, "src", "value.txt"), "utf8")).toBe("old\n");
+      expect(await readFile(join(sourcePath, "src", "value.txt"), "utf8")).toBe("new\n");
 
       await cleanupWorkspace({
         ...workspace,
@@ -320,6 +321,7 @@ describe("local workspace safety", () => {
       expect(result.applied).toBe(true);
       expect(result.error).toBeUndefined();
       expect(await readFile(join(workspace.workspacePath, "src", "value.txt"), "utf8")).toBe("new\n");
+      expect(await readFile(join(sourcePath, "src", "value.txt"), "utf8")).toBe("new\n");
       expect(result.patch?.workspacePatch).toContain("diff --git a/src/value.txt b/src/value.txt");
 
       await cleanupWorkspace({
@@ -334,7 +336,7 @@ describe("local workspace safety", () => {
 });
 
 describe("repair orchestration", () => {
-  test("calls repair agents in order and verifies the worker patch in a sandbox", async () => {
+  test("calls repair agents in order and verifies the worker patch in the source checkout", async () => {
     const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-source-"));
     const artifactsDir = await createArtifactsDir();
     const calls: string[] = [];
@@ -439,9 +441,9 @@ describe("repair orchestration", () => {
       expect(report.prGate).toBe("allow");
       expect(report.stage).toBe("complete");
       expect(report.verification?.patchApplied).toBe(true);
-      expect(report.verification?.sourcePatchStatus).toBe("pending_manual");
+      expect(report.verification?.sourcePatchStatus).toBe("applied");
       expect(report.codebaseContextPath).toBeTruthy();
-      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
+      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("new\n");
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
       await rm(artifactsDir, { recursive: true, force: true });
@@ -563,7 +565,7 @@ describe("repair orchestration", () => {
     }
   });
 
-  test("rewrites replicator reproduction commands to the patched workspace", async () => {
+  test("runs replicator reproduction commands directly in the source checkout", async () => {
     const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-source-"));
     const artifactsDir = await createArtifactsDir();
     const patch = `diff --git a/value.txt b/value.txt
@@ -656,10 +658,8 @@ describe("repair orchestration", () => {
 
       expect(report.status).toBe("passed");
       expect(report.verification?.patchApplied).toBe(true);
-      expect(report.verification?.commands[0]?.command).toContain(
-        report.verification?.workspacePath ?? ""
-      );
-      expect(report.verification?.commands[0]?.command).not.toContain(sourcePath);
+      expect(report.verification?.workspacePath).toBe(sourcePath);
+      expect(report.verification?.commands[0]?.command).toContain(sourcePath);
       expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("new\n");
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
@@ -667,7 +667,7 @@ describe("repair orchestration", () => {
     }
   });
 
-  test("keeps worker and tester edits out of the source checkout until manual apply", async () => {
+  test("runs worker and tester directly in the source checkout", async () => {
     const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-isolated-"));
     const artifactsDir = await createArtifactsDir();
     const patch = `diff --git a/value.txt b/value.txt
@@ -773,14 +773,12 @@ describe("repair orchestration", () => {
       );
 
       expect(report.status).toBe("passed");
-      expect(report.verification?.sourcePatchStatus).toBe("pending_manual");
-      expect(seenCheckouts.get("worker")).toBeDefined();
-      expect(seenCheckouts.get("worker")).not.toBe(sourcePath);
-      expect(seenCheckouts.get("tester")).toBeDefined();
-      expect(seenCheckouts.get("tester")).not.toBe(sourcePath);
-      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
-      await expect(readFile(join(sourcePath, "worker-only.txt"), "utf8")).rejects.toThrow();
-      await expect(readFile(join(sourcePath, "tester-only.txt"), "utf8")).rejects.toThrow();
+      expect(report.verification?.sourcePatchStatus).toBe("applied");
+      expect(seenCheckouts.get("worker")).toBe(sourcePath);
+      expect(seenCheckouts.get("tester")).toBe(sourcePath);
+      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("new\n");
+      expect(await readFile(join(sourcePath, "worker-only.txt"), "utf8")).toBe("temp worker file\n");
+      expect(await readFile(join(sourcePath, "tester-only.txt"), "utf8")).toBe("temp tester file\n");
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
       await rm(artifactsDir, { recursive: true, force: true });
@@ -943,8 +941,8 @@ describe("repair orchestration", () => {
       expect(report.status).toBe("passed");
       expect(report.prGate).toBe("allow");
       expect(testerWorkspaceValue).toBe("new\n");
-      expect(report.verification?.sourcePatchStatus).toBe("pending_manual");
-      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
+      expect(report.verification?.sourcePatchStatus).toBe("applied");
+      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("new\n");
     } finally {
       await rm(sourcePath, { recursive: true, force: true });
       await rm(artifactsDir, { recursive: true, force: true });

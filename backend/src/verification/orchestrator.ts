@@ -10,10 +10,11 @@ import { loadProjectVerificationConfig } from "./project-config";
 import { selectTechnologyProfile } from "./profiles";
 import {
   applyPatchToCheckout,
+  captureCheckoutSnapshot,
   cleanupWorkspace,
   createArtifactsDir,
   prepareWorkspace,
-  renderPatchFromCheckoutChanges,
+  renderPatchFromSnapshot,
 } from "./workspace";
 import type {
   BackendSelectionDecision,
@@ -744,8 +745,11 @@ async function browserCapabilityForRole(input: {
   };
 }
 
-async function cleanupVerificationWorkspace(workspacePath: string | undefined): Promise<void> {
-  if (!workspacePath) {
+async function cleanupVerificationWorkspace(
+  workspacePath: string | undefined,
+  sourcePath: string
+): Promise<void> {
+  if (!workspacePath || workspacePath === sourcePath) {
     return;
   }
 
@@ -1464,6 +1468,10 @@ export async function orchestrateRepair(
       profile,
       error: request.error,
     });
+    const workerSnapshot = await captureCheckoutSnapshot(
+      workerWorkspace.workspacePath,
+      workerCodebase.fileTree
+    );
 
     agents.worker = await executeAgent<WorkerAgentInput, WorkerAgentOutput>({
       role: "worker",
@@ -1482,9 +1490,9 @@ export async function orchestrateRepair(
     });
 
     if (agents.worker.output?.status === "patched") {
-      const renderedPatch = await renderPatchFromCheckoutChanges({
-        sourcePath: sourceRoot,
-        modifiedPath: workerWorkspace.workspacePath,
+      const renderedPatch = await renderPatchFromSnapshot({
+        snapshot: workerSnapshot,
+        rootPath: workerWorkspace.workspacePath,
         changedFiles: agents.worker.output.filesChanged,
       });
 
@@ -1681,7 +1689,10 @@ export async function orchestrateRepair(
     const final = finalStatusFromTester(agents.tester.output, verification);
 
     if (final.status === "passed" && verification.patchFiles?.original) {
-      if ((request.promotionMode ?? "auto") === "auto") {
+      if (
+        (request.promotionMode ?? "auto") === "auto" &&
+        verification.sourcePatchStatus !== "applied"
+      ) {
         await notifyStageChange(options, {
           repairAttemptId,
           stage: "promotion",
@@ -1755,7 +1766,7 @@ export async function orchestrateRepair(
     );
   } finally {
     if (cleanupVerificationWorkspaceAfterTester) {
-      await cleanupVerificationWorkspace(verification.workspacePath);
+      await cleanupVerificationWorkspace(verification.workspacePath, sourceRoot);
     }
   }
 }

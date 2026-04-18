@@ -1,6 +1,6 @@
-import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, normalize, resolve } from "node:path";
+import { dirname, join, normalize, resolve } from "node:path";
 import { spawn } from "node:child_process";
 
 import { runShellCommand } from "./commands";
@@ -12,22 +12,8 @@ import type {
   VerificationRunRequest,
 } from "./types";
 
-const EXCLUDED_WORKSPACE_NAMES = new Set([
-  ".git",
-  "node_modules",
-  ".next",
-  "dist",
-  "build",
-  "coverage",
-  "out",
-]);
-
 const WORKSPACE_PATCH_FILE = "worker.workspace.patch";
 const ORIGINAL_PATCH_FILE = "worker.original.patch";
-
-function shouldCopyPath(sourcePath: string): boolean {
-  return !EXCLUDED_WORKSPACE_NAMES.has(basename(sourcePath));
-}
 
 function normalizeRelativePath(filePath: string): string {
   return normalize(filePath).replaceAll("\\", "/").replace(/^\.\/+/, "");
@@ -160,6 +146,8 @@ export type RenderedCheckoutPatch = {
   patch?: string;
   changedFiles: string[];
 };
+
+export type CheckoutSnapshot = Record<string, string | null>;
 
 function changedFilesFromPatch(patch: string): string[] {
   const files = patch
@@ -619,6 +607,104 @@ export async function renderPatchFromCheckoutChanges(input: {
   }
 }
 
+export async function captureCheckoutSnapshot(
+  rootPath: string,
+  filePaths: string[]
+): Promise<CheckoutSnapshot> {
+  const snapshot: CheckoutSnapshot = {};
+  const normalizedPaths = filePaths
+    .map((filePath) => normalizeRelativePath(filePath))
+    .filter((filePath, index, paths) => filePath.length > 0 && paths.indexOf(filePath) === index);
+
+  for (const filePath of normalizedPaths) {
+    const absolutePath = resolve(rootPath, filePath);
+
+    if (!(await pathExists(absolutePath))) {
+      snapshot[filePath] = null;
+      continue;
+    }
+
+    snapshot[filePath] = await readFile(absolutePath, "utf8");
+  }
+
+  return snapshot;
+}
+
+export async function renderPatchFromSnapshot(input: {
+  snapshot: CheckoutSnapshot;
+  rootPath: string;
+  changedFiles?: string[];
+}): Promise<RenderedCheckoutPatch> {
+  const normalizedChangedFiles = await normalizeChangedFiles(
+    input.rootPath,
+    input.changedFiles
+  );
+
+  if (normalizedChangedFiles.length === 0) {
+    return {
+      patch: undefined,
+      changedFiles: [],
+    };
+  }
+
+  const tempRoot = await mkdtemp(join(tmpdir(), "aurakeeper-rendered-worker-patch-"));
+  const originalRoot = join(tempRoot, "original");
+  const modifiedRoot = join(tempRoot, "modified");
+  const renderedDiffs: string[] = [];
+  const actualChangedFiles: string[] = [];
+
+  try {
+    await mkdir(originalRoot, { recursive: true });
+    await mkdir(modifiedRoot, { recursive: true });
+
+    for (const filePath of normalizedChangedFiles) {
+      const baselineContent = Object.prototype.hasOwnProperty.call(input.snapshot, filePath)
+        ? input.snapshot[filePath]
+        : null;
+      const modifiedFile = resolve(input.rootPath, filePath);
+      const modifiedExists = await pathExists(modifiedFile);
+
+      if (baselineContent === null && !modifiedExists) {
+        continue;
+      }
+
+      const oldTempPath = join(originalRoot, filePath);
+      const newTempPath = join(modifiedRoot, filePath);
+
+      await mkdir(dirname(oldTempPath), { recursive: true });
+      await mkdir(dirname(newTempPath), { recursive: true });
+      await writeFile(oldTempPath, baselineContent ?? "");
+
+      if (modifiedExists) {
+        await writeFile(newTempPath, await readFile(modifiedFile, "utf8"));
+      } else {
+        await writeFile(newTempPath, "");
+      }
+
+      const diffBody = await runDiffCommand(
+        baselineContent !== null ? `a/${filePath}` : "/dev/null",
+        oldTempPath,
+        modifiedExists ? `b/${filePath}` : "/dev/null",
+        newTempPath
+      );
+
+      if (diffBody.trim().length === 0) {
+        continue;
+      }
+
+      renderedDiffs.push(`diff --git a/${filePath} b/${filePath}\n${diffBody}`);
+      actualChangedFiles.push(filePath);
+    }
+
+    return {
+      patch: renderedDiffs.length > 0 ? renderedDiffs.join("") : undefined,
+      changedFiles: actualChangedFiles,
+    };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 export async function createArtifactsDir(artifactsDir?: string): Promise<string> {
   const directory = artifactsDir
     ? resolve(artifactsDir)
@@ -637,24 +723,13 @@ export async function prepareWorkspace(input: {
   artifactsDir: string;
 }): Promise<PreparedWorkspace> {
   const sourcePath = resolve(input.request.repository.checkoutPath);
-  const workspaceParent = await mkdtemp(join(tmpdir(), "aurakeeper-workspace-"));
-  const workspacePath = join(workspaceParent, basename(sourcePath) || "project");
-  const keepWorkspace =
-    input.request.keepWorkspace ??
-    input.config.local?.keepWorkspace ??
-    false;
-
-  await cp(sourcePath, workspacePath, {
-    recursive: true,
-    filter: shouldCopyPath,
-  });
 
   return {
     backend: input.backend,
     sourcePath,
-    workspacePath,
+    workspacePath: sourcePath,
     artifactsDir: input.artifactsDir,
-    keepWorkspace,
+    keepWorkspace: true,
     profile: input.profile,
     config: input.config,
   };
@@ -741,7 +816,7 @@ export async function applyWorkerPatch(
 }
 
 export async function cleanupWorkspace(workspace: PreparedWorkspace): Promise<void> {
-  if (workspace.keepWorkspace) {
+  if (workspace.keepWorkspace || workspace.workspacePath === workspace.sourcePath) {
     return;
   }
 

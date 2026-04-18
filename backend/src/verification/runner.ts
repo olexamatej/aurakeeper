@@ -426,6 +426,7 @@ export async function runVerification(
     config,
     artifactsDir,
   });
+  const verifyingInSourceCheckout = workspace.workspacePath === sourceRoot;
   let patchApplied = false;
   const patchFiles = patch
     ? {
@@ -434,7 +435,11 @@ export async function runVerification(
       }
     : undefined;
   const sourcePatchStatusForVerification: VerificationRunReport["sourcePatchStatus"] =
-    request.promotionMode === "manual" ? "pending_manual" : "not_requested";
+    verifyingInSourceCheckout
+      ? "applied"
+      : request.promotionMode === "manual"
+        ? "pending_manual"
+        : "not_requested";
 
   try {
     const patchResult = patch
@@ -508,7 +513,11 @@ export async function runVerification(
   const status = statusFromResults(commandResults);
   const finishedAt = new Date().toISOString();
   const sourcePatchStatus: VerificationRunReport["sourcePatchStatus"] =
-    status.status === "passed" ? sourcePatchStatusForVerification : "not_requested";
+    verifyingInSourceCheckout
+      ? sourcePatchStatusForVerification
+      : status.status === "passed"
+        ? sourcePatchStatusForVerification
+        : "not_requested";
   const report: VerificationRunReport = {
     repairAttemptId: request.repairAttemptId,
     status: status.status,
@@ -528,6 +537,8 @@ export async function runVerification(
     promotionMode: request.promotionMode ?? "auto",
     sourceCheckoutPath: sourceRoot,
     sourcePatchStatus,
+    sourcePatchAppliedAt:
+      sourcePatchStatus === "applied" && patchApplied ? finishedAt : undefined,
     failureReason: status.failureReason,
     startedAt,
     finishedAt,
