@@ -28,7 +28,8 @@ import {
   parseUpdateProjectRequest,
 } from "./validation";
 
-const DEFAULT_ALLOWED_HEADERS = "Content-Type, X-Admin-Token, X-API-Token";
+const DEFAULT_ALLOWED_HEADERS =
+  "Content-Type, Authorization, X-Admin-Token, X-API-Token";
 const DEFAULT_ALLOWED_METHODS = "GET, POST, OPTIONS";
 
 function getAllowedOrigin(origin: string | null): string | null {
@@ -120,6 +121,32 @@ function serializeProject(project: typeof projects.$inferSelect) {
       : undefined,
     createdAt: project.createdAt,
   };
+}
+
+function getApiTokenFromAuthorizationHeader(authorization: string | null): string | null {
+  if (!authorization) {
+    return null;
+  }
+
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const token = match[1]?.trim();
+
+  return token && token.length > 0 ? token : null;
+}
+
+function getProjectApiToken(request: Request): string | null {
+  const apiToken = request.headers.get("x-api-token");
+
+  if (apiToken && apiToken.trim().length > 0) {
+    return apiToken.trim();
+  }
+
+  return getApiTokenFromAuthorizationHeader(request.headers.get("authorization"));
 }
 
 function requireProjectByApiToken(apiToken: string | null) {
@@ -406,7 +433,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
     return run;
   })
   .get("/v1/logs/errors", ({ request }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
 
     return db
       .select()
@@ -417,7 +444,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
       .map(serializeErrorLog);
   })
   .post("/v1/logs/errors", async ({ request, set }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
     const payload = parseErrorLogRequest(await parseJsonBody(request));
     const accepted = insertErrorLog(project.id, payload);
 
@@ -430,7 +457,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
     return accepted;
   })
   .post("/v1/sources/sentry", async ({ request, set }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
     const payload = parseCreateSentrySourceRequest(await parseJsonBody(request));
 
     set.status = 201;
@@ -438,7 +465,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
     return createSentrySource(project.id, payload);
   })
   .post("/v1/sources/sentry/:sourceId/poll", async ({ request, params }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
 
     return pollSentrySource(project, params.sourceId, {
       onImportedErrorLog(errorLog) {
@@ -449,7 +476,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
     });
   })
   .post("/v1/logs/errors/:logId/repair-attempts", async ({ request, params, set }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
     requireProjectRepairTarget(project);
     const errorLog = requireErrorLogForProject(project.id, params.logId);
     const payload = parseCreateRepairAttemptRequest(await parseOptionalJsonBody(request));
@@ -461,7 +488,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
     });
   })
   .get("/v1/logs/errors/:logId/repair-status", ({ request, params }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
     requireErrorLogForProject(project.id, params.logId);
 
     const activeStatus = repairCoordinator.getActiveStatus(params.logId);
@@ -472,7 +499,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
     };
   })
   .get("/v1/logs/errors/:logId/repair-attempts", ({ request, params }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
     requireErrorLogForProject(project.id, params.logId);
 
     return listRepairAttemptsForErrorLog(project.id, params.logId);
@@ -493,7 +520,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
     }
   )
   .get("/v1/logs/errors/:logId/artifacts/:artifactId", async ({ request, params, set }) => {
-    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const project = requireProjectByApiToken(getProjectApiToken(request));
     requireErrorLogForProject(project.id, params.logId);
 
     const artifact = await readRepairArtifactContent(project.id, params.logId, params.artifactId);

@@ -120,6 +120,8 @@ curl -X POST http://localhost:3000/v1/logs/errors \
   }'
 ```
 
+The same project token is also accepted as `Authorization: Bearer <project-token>`.
+
 List stored error logs for the project:
 
 ```bash
