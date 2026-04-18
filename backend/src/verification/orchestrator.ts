@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -472,12 +472,37 @@ function nestedString(value: unknown, path: string[]): string | undefined {
   return typeof current === "string" && current.length > 0 ? current : undefined;
 }
 
+function isApiLikePath(path: string | undefined): boolean {
+  if (!path) {
+    return false;
+  }
+
+  try {
+    const pathname =
+      path.startsWith("http://") || path.startsWith("https://")
+        ? new URL(path).pathname
+        : path;
+
+    return pathname === "/api" || pathname.startsWith("/api/");
+  } catch {
+    return false;
+  }
+}
+
 function browserRoles(config: ProjectVerificationConfig): BrowserAutomationRole[] {
   return config.browser?.roles?.filter((role, index, roles) => roles.indexOf(role) === index) ??
     DEFAULT_BROWSER_ROLES;
 }
 
 function looksLikeFrontendError(error: StructuredErrorEvent): boolean {
+  const requestUrl = nestedString(error, ["context", "request", "url"]);
+  const requestPath = nestedString(error, ["context", "request", "path"]);
+  const detailsUrl = nestedString(error, ["error", "details", "url"]);
+
+  if (isApiLikePath(requestUrl) || isApiLikePath(requestPath) || isApiLikePath(detailsUrl)) {
+    return false;
+  }
+
   const platform = nestedString(error, ["platform"])?.toLowerCase();
 
   if (platform && FRONTEND_PLATFORMS.has(platform)) {
@@ -672,6 +697,10 @@ async function browserCapabilityForRole(input: {
   }
 
   const targetUrl = browserTargetUrl(input.error, input.config);
+
+  if (isApiLikePath(targetUrl)) {
+    return undefined;
+  }
   const command = input.config.browser?.command ?? "agent-browser";
 
   if (!(await (input.commandAvailable ?? defaultBrowserCommandAvailable)(command))) {
@@ -964,8 +993,14 @@ async function writeJsonArtifact(
   value: unknown
 ): Promise<string> {
   const filePath = join(artifactsDir, fileName);
+  await mkdir(artifactsDir, { recursive: true });
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
   return filePath;
+}
+
+async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 function errorMessage(error: unknown): string {
@@ -974,6 +1009,45 @@ function errorMessage(error: unknown): string {
   }
 
   return String(error);
+}
+
+async function validateBrowserScreenshots(
+  capability: BrowserAutomationCapability | undefined
+): Promise<string | undefined> {
+  if (!capability) {
+    return undefined;
+  }
+
+  for (const fileName of capability.requiredScreenshots) {
+    const filePath = join(capability.screenshotDir, fileName);
+
+    let fileBuffer: Buffer;
+
+    try {
+      fileBuffer = await readFile(filePath);
+    } catch {
+      return `Required browser screenshot was not captured: ${fileName}`;
+    }
+
+    if (fileBuffer.length < 24) {
+      return `Required browser screenshot is invalid or truncated: ${fileName}`;
+    }
+
+    const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+    if (!fileBuffer.subarray(0, 8).equals(pngSignature) || fileBuffer.toString("ascii", 12, 16) !== "IHDR") {
+      return `Required browser screenshot is not a valid PNG: ${fileName}`;
+    }
+
+    const width = fileBuffer.readUInt32BE(16);
+    const height = fileBuffer.readUInt32BE(20);
+
+    if (width <= 1 || height <= 1) {
+      return `Required browser screenshot is implausibly small (${width}x${height}): ${fileName}`;
+    }
+  }
+
+  return undefined;
 }
 
 async function executeAgent<TInput, TOutput>(input: {
@@ -1012,6 +1086,7 @@ async function executeAgent<TInput, TOutput>(input: {
 
   try {
     const result = await input.agentClient.run<TInput, TOutput>(task);
+    const browserArtifactError = await validateBrowserScreenshots(input.capabilities?.browser);
     const record: AgentRunRecord<TOutput> = {
       role: input.role,
       promptPath: input.prompt.path,
@@ -1023,9 +1098,10 @@ async function executeAgent<TInput, TOutput>(input: {
       output: result.output,
       artifacts: result.artifacts,
       raw: result.raw,
+      error: browserArtifactError,
     };
 
-    await writeFile(resultPath, `${JSON.stringify(record, null, 2)}\n`);
+    await writeJsonFile(resultPath, record);
     return record;
   } catch (error) {
     const record: AgentRunRecord<TOutput> = {
@@ -1039,7 +1115,7 @@ async function executeAgent<TInput, TOutput>(input: {
       error: errorMessage(error),
     };
 
-    await writeFile(resultPath, `${JSON.stringify(record, null, 2)}\n`);
+    await writeJsonFile(resultPath, record);
     return record;
   }
 }

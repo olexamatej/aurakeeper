@@ -28,6 +28,7 @@ export interface ProjectRepairSettings {
   repositoryUrl?: string
   baseCommit?: string
   backend?: "auto" | "docker" | "local"
+  agent?: "codex" | "pi"
   environment?: "production" | "hosted" | "local" | "development"
   trustLevel?: "trusted" | "untrusted"
   promotionMode?: "auto" | "manual"

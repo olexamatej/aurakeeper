@@ -167,6 +167,9 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
                     Target repo: {project.repair?.checkoutPath}
                   </p>
                   <p className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
+                    Agent: {project.repair?.agent ?? "codex"}
+                  </p>
+                  <p className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                     Verified patch apply: {project.repair?.promotionMode === "manual" ? "Manual" : "Auto"}
                   </p>
                 </div>

@@ -348,4 +348,137 @@ describe("repair coordination", () => {
       await rm(sourcePath, { recursive: true, force: true });
     }
   });
+
+  test("selects the configured project repair agent", async () => {
+    const suffix = `${Date.now().toString(36)}${crypto.randomUUID().slice(0, 8)}`;
+    const projectId = `proj_agent_${suffix}`;
+    const projectToken = `token_${suffix}`;
+    const errorLogId = `log_agent_${suffix}`;
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-repair-agent-"));
+    const patch = `diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-old
++new
+`;
+    const selectedProviders: string[] = [];
+    const app = createApp({
+      repairCoordinator: new RepairCoordinator({
+        agentClientFactory: (provider) => {
+          selectedProviders.push(provider);
+          return createAgentClient(patch);
+        },
+      }),
+    });
+
+    try {
+      await writeFile(join(sourcePath, "value.txt"), "old\n");
+      await writeFile(
+        join(sourcePath, ".aurakeeper.json"),
+        JSON.stringify({
+          profiles: ["generic"],
+          execution: {
+            preferredBackend: "local",
+            environment: "local",
+            trustLevel: "trusted",
+          },
+          commands: {
+            targeted: ['test "$(cat value.txt)" = "new"'],
+          },
+        })
+      );
+
+      db.insert(projects)
+        .values({
+          id: projectId,
+          name: "Repair Agent",
+          token: projectToken,
+          repairCheckoutPath: sourcePath,
+          repairBackend: "local",
+          repairAgent: "pi",
+          repairEnvironment: "local",
+          repairTrustLevel: "trusted",
+          repairPromotionMode: "manual",
+          repairAutoTrigger: false,
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+
+      db.insert(errorLogs)
+        .values({
+          id: errorLogId,
+          projectId,
+          state: "new_error",
+          eventId: null,
+          occurredAt: "2026-04-18T08:32:17Z",
+          receivedAt: "2026-04-18T08:32:18Z",
+          level: "error",
+          platform: "backend",
+          environment: "local",
+          serviceName: "fixture",
+          serviceVersion: null,
+          serviceInstanceId: null,
+          sourceRuntime: "node",
+          sourceLanguage: "javascript",
+          sourceFramework: null,
+          sourceComponent: null,
+          errorType: "Error",
+          errorMessage: "expected new value",
+          errorCode: null,
+          errorStack: "Error: expected new value\n    at readValue (value.txt:1:1)",
+          errorHandled: false,
+          errorDetails: null,
+          context: null,
+          rawPayload: JSON.stringify({
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "backend",
+            service: { name: "fixture" },
+            source: { runtime: "node", language: "javascript" },
+            error: {
+              message: "expected new value",
+              stack: "Error: expected new value\n    at readValue (value.txt:1:1)",
+            },
+          }),
+          createdAt: "2026-04-18T08:32:18Z",
+        })
+        .run();
+
+      const response = await app.handle(
+        new Request(`http://localhost:3000/v1/logs/errors/${errorLogId}/repair-attempts`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Token": projectToken,
+          },
+          body: JSON.stringify({}),
+        })
+      );
+
+      expect(response.status).toBe(202);
+
+      await waitFor(
+        async () =>
+          db.select().from(repairAttempts).where(eq(repairAttempts.projectId, projectId)).all(),
+        (value) => value.length === 1
+      );
+
+      expect(selectedProviders).toEqual(["pi"]);
+    } finally {
+      db.delete(repairArtifacts)
+        .where(eq(repairArtifacts.projectId, projectId))
+        .run();
+      db.delete(repairAttempts)
+        .where(eq(repairAttempts.projectId, projectId))
+        .run();
+      db.delete(errorLogs)
+        .where(eq(errorLogs.projectId, projectId))
+        .run();
+      db.delete(projects)
+        .where(eq(projects.id, projectId))
+        .run();
+      await rm(sourcePath, { recursive: true, force: true });
+    }
+  });
 });

@@ -151,7 +151,7 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
           </p>
           {project.repair?.checkoutPath ? (
             <p className="mt-1 text-xs text-muted-foreground">
-              {project.repair.autoTrigger ? "Auto-fix enabled" : "Manual fix mode"} at {project.repair.checkoutPath}
+              {(project.repair.agent ?? "codex").toUpperCase()} · {project.repair.autoTrigger ? "Auto-fix enabled" : "Manual fix mode"} at {project.repair.checkoutPath}
             </p>
           ) : (
             <p className="mt-1 text-xs text-muted-foreground">

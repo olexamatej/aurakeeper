@@ -21,6 +21,10 @@ The server reads these environment variables:
 - `CODEX_MODEL` - optional model override passed to `codex exec`.
 - `CODEX_PROFILE` - optional Codex profile name passed to `codex exec`.
 - `CODEX_SANDBOX` - Codex sandbox mode for agent runs. Defaults to `workspace-write`.
+- `PI_PATH` - path to the `pi` executable used when a project selects the Pi repair agent. Defaults to `pi`.
+- `PI_PROVIDER` - optional provider override passed to `pi`.
+- `PI_MODEL` - optional model override passed to `pi`.
+- `PI_THINKING` - optional Pi thinking level (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`).
 - `PORT` - bind port. Defaults to `3000`.
 
 Project-specific verification settings can also live in `.aurakeeper.json`,
@@ -67,6 +71,11 @@ The verification module also includes a `CodexCliAgentClient` in
 requires the final answer to match a JSON schema so the orchestrator can parse
 structured agent output safely.
 
+Projects can now set `repair.agent` to either `codex` or `pi`. The Pi-backed
+client lives in `src/verification/pi-agent.ts` and uses `pi --print --no-session`
+with the same structured AuraKeeper task prompt, so the orchestrator can switch
+between the two CLIs per project.
+
 ## Example Requests
 
 Create a project and receive its ingestion token:
@@ -80,6 +89,7 @@ curl -X POST http://localhost:3000/v1/projects \
     "repair": {
       "checkoutPath": "/absolute/path/to/aura-web",
       "backend": "local",
+      "agent": "codex",
       "environment": "local",
       "trustLevel": "trusted",
       "autoTrigger": true
@@ -97,6 +107,7 @@ curl -X PATCH http://localhost:3000/v1/projects/<project-id> \
     "repair": {
       "checkoutPath": "/absolute/path/to/aura-web",
       "backend": "local",
+      "agent": "pi",
       "environment": "local",
       "trustLevel": "trusted",
       "autoTrigger": false
@@ -131,8 +142,8 @@ curl http://localhost:3000/v1/logs/errors \
 
 Accepted error logs are created with the default workflow state `new_error`.
 If the project has `repair.autoTrigger: true` and a configured checkout path,
-the backend immediately queues the Codex-backed repair pipeline for the new log
-and advances the log state into the repair workflow.
+the backend immediately queues the configured repair pipeline (`codex` or `pi`)
+for the new log and advances the log state into the repair workflow.
 
 Manually trigger a repair attempt for a previously stored log:
 

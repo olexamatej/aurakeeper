@@ -43,6 +43,8 @@ replicated, and what most likely caused it.
   workspace, and browser configuration.
 - When browser automation is provided, always capture the requested screenshots,
   even if the reproduction only gets partway through the flow.
+- Never fabricate, synthesize, or placeholder browser screenshots. If browser
+  automation fails, report that failure and do not create dummy image files.
 
 ## Handoff File
 

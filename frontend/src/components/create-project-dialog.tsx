@@ -27,6 +27,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(project?.name ?? "")
   const [checkoutPath, setCheckoutPath] = useState(project?.repair?.checkoutPath ?? "")
+  const [agent, setAgent] = useState<"codex" | "pi">(project?.repair?.agent ?? "codex")
   const [promotionMode, setPromotionMode] = useState<"auto" | "manual">(
     project?.repair?.promotionMode ?? "auto",
   )
@@ -37,6 +38,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
     mutationFn: (input: {
       name: string
       checkoutPath?: string
+      agent: "codex" | "pi"
       promotionMode: "auto" | "manual"
       autoTrigger: boolean
     }) =>
@@ -47,6 +49,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
               ? {
                   checkoutPath: input.checkoutPath,
                   backend: project.repair?.backend ?? "local",
+                  agent: input.agent,
                   environment: project.repair?.environment ?? "local",
                   trustLevel: project.repair?.trustLevel ?? "trusted",
                   repositoryUrl: project.repair?.repositoryUrl,
@@ -62,6 +65,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
               ? {
                   checkoutPath: input.checkoutPath,
                   backend: "local",
+                  agent: input.agent,
                   environment: "local",
                   trustLevel: "trusted",
                   promotionMode: input.promotionMode,
@@ -75,6 +79,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
       setOpen(false)
       setName(project.name)
       setCheckoutPath(project.repair?.checkoutPath ?? "")
+      setAgent(project.repair?.agent ?? "codex")
       setPromotionMode(project.repair?.promotionMode ?? "auto")
       setAutoTrigger(project.repair?.autoTrigger ?? true)
       toast.success(
@@ -97,6 +102,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
     if (!nextOpen) {
       setName(project?.name ?? "")
       setCheckoutPath(project?.repair?.checkoutPath ?? "")
+      setAgent(project?.repair?.agent ?? "codex")
       setPromotionMode(project?.repair?.promotionMode ?? "auto")
       setAutoTrigger(project?.repair?.autoTrigger ?? true)
     }
@@ -111,6 +117,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
     mutation.mutate({
       name: trimmed,
       checkoutPath: trimmedCheckoutPath || undefined,
+      agent,
       promotionMode,
       autoTrigger,
     })
@@ -167,7 +174,24 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
               </p>
             </div>
 
-            <div>
+            <div className="mt-4">
+              <Label htmlFor="project-agent">Repair agent</Label>
+              <select
+                id="project-agent"
+                value={agent}
+                onChange={(e) => setAgent(e.target.value as "codex" | "pi")}
+                disabled={mutation.isPending || !checkoutPath.trim()}
+                className="mt-2 flex h-12 w-full rounded-lg border-0 border-b-2 border-white/20 bg-black/50 px-4 text-sm text-foreground outline-none transition-all duration-200 focus:border-[#A855F7] focus:shadow-[0_10px_20px_-10px_rgba(168,85,247,0.55)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="codex">Codex CLI</option>
+                <option value="pi">Pi CLI</option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose which coding agent AuraKeeper should launch for repair runs in this checkout.
+              </p>
+            </div>
+
+            <div className="mt-4">
               <Label htmlFor="project-promotion-mode">Verified patch apply mode</Label>
               <select
                 id="project-promotion-mode"

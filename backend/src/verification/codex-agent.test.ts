@@ -203,4 +203,47 @@ describe("CodexCliAgentClient", () => {
       prGate: "allow",
     });
   });
+
+  test("tells the worker to return a git-applicable unified diff", async () => {
+    const client = new CodexCliAgentClient({
+      codexPath: "/mock/codex",
+      runner: async ({ args, stdin }) => {
+        expect(stdin).toContain("The `patch` field must be a unified diff");
+        expect(stdin).toContain("Do not return an `apply_patch` block");
+        expect(stdin).toContain("Start the patch with `diff --git a/... b/...`");
+
+        const outputPath = args[args.indexOf("--output-last-message") + 1] as string;
+
+        await writeFile(
+          outputPath,
+          `${JSON.stringify({
+            output: {
+              status: "patched",
+              issueSummary: "Fix stale value",
+              suspectedRootCause: "Old value remained in file",
+              patch: "diff --git a/src/index.ts b/src/index.ts",
+              filesChanged: ["src/index.ts"],
+              locChanged: 1,
+              verificationCommands: [],
+              confidence: "high",
+              remainingRisk: null,
+            },
+            artifacts: [],
+          })}\n`
+        );
+
+        return {
+          exitCode: 0,
+          stdout: "",
+          stderr: "",
+        };
+      },
+    });
+
+    const result = await client.run(createTask("worker"));
+
+    expect(result.output).toMatchObject({
+      status: "patched",
+    });
+  });
 });

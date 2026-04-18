@@ -56,6 +56,7 @@ describe("project updates", () => {
           token: `token_${suffix}`,
           repairCheckoutPath: "/tmp/original",
           repairBackend: "local",
+          repairAgent: "codex",
           repairEnvironment: "local",
           repairTrustLevel: "trusted",
           repairAutoTrigger: false,
@@ -74,6 +75,7 @@ describe("project updates", () => {
             repair: {
               checkoutPath: "/tmp/updated",
               backend: "local",
+              agent: "pi",
               environment: "local",
               trustLevel: "trusted",
               autoTrigger: true,
@@ -87,6 +89,7 @@ describe("project updates", () => {
         repair?: {
           checkoutPath: string;
           backend?: string;
+          agent?: string;
           environment?: string;
           trustLevel?: string;
           promotionMode?: string;
@@ -97,6 +100,7 @@ describe("project updates", () => {
       expect(body.repair).toEqual({
         checkoutPath: "/tmp/updated",
         backend: "local",
+        agent: "pi",
         environment: "local",
         trustLevel: "trusted",
         promotionMode: "auto",
@@ -119,6 +123,7 @@ describe("project updates", () => {
           token: `token_${suffix}`,
           repairCheckoutPath: "/tmp/original",
           repairBackend: "local",
+          repairAgent: "codex",
           repairEnvironment: "local",
           repairTrustLevel: "trusted",
           repairAutoTrigger: true,

@@ -27,6 +27,7 @@ sqlite.exec(`
     repair_repository_url TEXT,
     repair_base_commit TEXT,
     repair_backend TEXT,
+    repair_agent TEXT,
     repair_environment TEXT,
     repair_trust_level TEXT,
     repair_promotion_mode TEXT NOT NULL DEFAULT 'auto',
@@ -175,6 +176,10 @@ if (!hasColumn("projects", "repair_base_commit")) {
 
 if (!hasColumn("projects", "repair_backend")) {
   sqlite.exec("ALTER TABLE projects ADD COLUMN repair_backend TEXT;");
+}
+
+if (!hasColumn("projects", "repair_agent")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN repair_agent TEXT;");
 }
 
 if (!hasColumn("projects", "repair_environment")) {

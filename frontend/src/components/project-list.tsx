@@ -82,7 +82,7 @@ export function ProjectList({
                   <div className="truncate text-sm font-medium">{project.name}</div>
                   {project.repair?.checkoutPath ? (
                     <div className="truncate font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
-                      {project.repair.autoTrigger ? "Auto-fix on" : "Manual fix only"}
+                      {project.repair.agent ?? "codex"} • {project.repair.autoTrigger ? "Auto-fix on" : "Manual fix only"}
                     </div>
                   ) : null}
                 </div>

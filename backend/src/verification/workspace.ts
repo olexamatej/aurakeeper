@@ -1,6 +1,7 @@
 import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, normalize, resolve } from "node:path";
+import { spawn } from "node:child_process";
 
 import { runShellCommand } from "./commands";
 import type {
@@ -165,6 +166,336 @@ function changedFilesFromPatch(patch: string): string[] {
   return files.filter((filePath, index) => files.indexOf(filePath) === index);
 }
 
+type CodexPatchOperation =
+  | {
+      type: "add";
+      path: string;
+      lines: string[];
+    }
+  | {
+      type: "delete";
+      path: string;
+    }
+  | {
+      type: "update";
+      path: string;
+      moveTo?: string;
+      lines: string[];
+    };
+
+function isCodexApplyPatch(patch: string): boolean {
+  return patch.trimStart().startsWith("*** Begin Patch");
+}
+
+function parseCodexApplyPatch(patch: string): CodexPatchOperation[] {
+  const lines = patch.replace(/\r\n/g, "\n").split("\n");
+
+  if (lines[0] !== "*** Begin Patch") {
+    throw new Error("Unsupported worker patch format.");
+  }
+
+  const operations: CodexPatchOperation[] = [];
+  let index = 1;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (line === "*** End Patch") {
+      return operations;
+    }
+
+    if (line.startsWith("*** Add File: ")) {
+      const path = line.slice("*** Add File: ".length);
+      index += 1;
+      const addLines: string[] = [];
+
+      while (index < lines.length && !lines[index].startsWith("*** ")) {
+        const nextLine = lines[index];
+
+        if (!nextLine.startsWith("+")) {
+          throw new Error(`Invalid add-file patch line: ${nextLine}`);
+        }
+
+        addLines.push(nextLine.slice(1));
+        index += 1;
+      }
+
+      operations.push({
+        type: "add",
+        path,
+        lines: addLines,
+      });
+      continue;
+    }
+
+    if (line.startsWith("*** Delete File: ")) {
+      operations.push({
+        type: "delete",
+        path: line.slice("*** Delete File: ".length),
+      });
+      index += 1;
+      continue;
+    }
+
+    if (line.startsWith("*** Update File: ")) {
+      const path = line.slice("*** Update File: ".length);
+      index += 1;
+      let moveTo: string | undefined;
+
+      if (lines[index]?.startsWith("*** Move to: ")) {
+        moveTo = lines[index].slice("*** Move to: ".length);
+        index += 1;
+      }
+
+      const updateLines: string[] = [];
+
+      while (index < lines.length && !lines[index].startsWith("*** End Patch")) {
+        const nextLine = lines[index];
+
+        if (nextLine.startsWith("*** Update File: ") || nextLine.startsWith("*** Add File: ") || nextLine.startsWith("*** Delete File: ")) {
+          break;
+        }
+
+        updateLines.push(nextLine);
+        index += 1;
+      }
+
+      operations.push({
+        type: "update",
+        path,
+        moveTo,
+        lines: updateLines,
+      });
+      continue;
+    }
+
+    if (line === "") {
+      index += 1;
+      continue;
+    }
+
+    throw new Error(`Unsupported worker patch header: ${line}`);
+  }
+
+  throw new Error("Worker patch did not terminate with *** End Patch.");
+}
+
+function splitFileContent(content: string): string[] {
+  return content.replace(/\r\n/g, "\n").split("\n");
+}
+
+function joinPatchedLines(lines: string[]): string {
+  return lines.join("\n");
+}
+
+function findSequence(lines: string[], sequence: string[], start: number): number {
+  if (sequence.length === 0) {
+    return start;
+  }
+
+  for (let index = start; index <= lines.length - sequence.length; index += 1) {
+    let matches = true;
+
+    for (let offset = 0; offset < sequence.length; offset += 1) {
+      if (lines[index + offset] !== sequence[offset]) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function applyCodexUpdateOperation(original: string, patchLines: string[]): string {
+  const originalLines = splitFileContent(original);
+  const output: string[] = [];
+  let cursor = 0;
+  let index = 0;
+
+  while (index < patchLines.length) {
+    if (patchLines[index] === "*** End of File") {
+      index += 1;
+      continue;
+    }
+
+    if (!patchLines[index].startsWith("@@")) {
+      throw new Error(`Unsupported worker patch body line: ${patchLines[index]}`);
+    }
+
+    index += 1;
+    const hunkLines: string[] = [];
+
+    while (index < patchLines.length && !patchLines[index].startsWith("@@")) {
+      if (patchLines[index] === "*** End of File") {
+        index += 1;
+        break;
+      }
+
+      hunkLines.push(patchLines[index]);
+      index += 1;
+    }
+
+    const oldLines = hunkLines
+      .filter((line) => line.startsWith(" ") || line.startsWith("-"))
+      .map((line) => line.slice(1));
+    const newLines = hunkLines
+      .filter((line) => line.startsWith(" ") || line.startsWith("+"))
+      .map((line) => line.slice(1));
+
+    const matchIndex = findSequence(originalLines, oldLines, cursor);
+
+    if (matchIndex < 0) {
+      throw new Error("Worker patch could not be matched against the source file.");
+    }
+
+    output.push(...originalLines.slice(cursor, matchIndex), ...newLines);
+    cursor = matchIndex + oldLines.length;
+  }
+
+  output.push(...originalLines.slice(cursor));
+
+  return joinPatchedLines(output);
+}
+
+async function runDiffCommand(
+  oldLabel: string,
+  oldPath: string,
+  newLabel: string,
+  newPath: string
+): Promise<string> {
+  const command = [
+    "diff",
+    "-u",
+    `--label=${oldLabel}`,
+    `--label=${newLabel}`,
+    JSON.stringify(oldPath),
+    JSON.stringify(newPath),
+  ].join(" ");
+
+  const result = await runShellCommand(
+    {
+      id: "workspace:render-patch",
+      command,
+      phase: "setup",
+      source: "config",
+      network: "disabled",
+    },
+    {
+      cwd: process.cwd(),
+      timeoutMs: 30_000,
+    }
+  );
+
+  if (result.exitCode === 0) {
+    return "";
+  }
+
+  if (result.exitCode !== 1) {
+    throw new Error(result.stderr || result.stdout || "Failed to render worker patch.");
+  }
+
+  return result.stdout;
+}
+
+async function convertCodexApplyPatchToUnifiedDiff(
+  sourcePath: string,
+  patch: string
+): Promise<string> {
+  const operations = parseCodexApplyPatch(patch);
+  const tempRoot = await mkdtemp(join(tmpdir(), "aurakeeper-codex-patch-"));
+  const originalRoot = join(tempRoot, "original");
+  const modifiedRoot = join(tempRoot, "modified");
+  const renderedDiffs: string[] = [];
+
+  try {
+    await mkdir(originalRoot, { recursive: true });
+    await mkdir(modifiedRoot, { recursive: true });
+
+    for (const operation of operations) {
+      if (operation.type === "delete") {
+        const sourceFile = resolve(sourcePath, operation.path);
+        const originalContent = await readFile(sourceFile, "utf8");
+        const oldTempPath = join(originalRoot, operation.path);
+        const newTempPath = join(modifiedRoot, operation.path);
+
+        await mkdir(dirname(oldTempPath), { recursive: true });
+        await mkdir(dirname(newTempPath), { recursive: true });
+        await writeFile(oldTempPath, originalContent);
+        await writeFile(newTempPath, "");
+
+        const diffBody = await runDiffCommand(
+          `a/${operation.path}`,
+          oldTempPath,
+          "/dev/null",
+          newTempPath
+        );
+
+        if (diffBody.trim().length > 0) {
+          renderedDiffs.push(`diff --git a/${operation.path} b/${operation.path}\n${diffBody}`);
+        }
+
+        continue;
+      }
+
+      if (operation.type === "add") {
+        const oldTempPath = join(originalRoot, operation.path);
+        const newTempPath = join(modifiedRoot, operation.path);
+        const newContent = `${operation.lines.join("\n")}\n`;
+
+        await mkdir(dirname(oldTempPath), { recursive: true });
+        await mkdir(dirname(newTempPath), { recursive: true });
+        await writeFile(oldTempPath, "");
+        await writeFile(newTempPath, newContent);
+
+        const diffBody = await runDiffCommand(
+          "/dev/null",
+          oldTempPath,
+          `b/${operation.path}`,
+          newTempPath
+        );
+
+        if (diffBody.trim().length > 0) {
+          renderedDiffs.push(`diff --git a/${operation.path} b/${operation.path}\n${diffBody}`);
+        }
+
+        continue;
+      }
+
+      const sourceFile = resolve(sourcePath, operation.path);
+      const originalContent = await readFile(sourceFile, "utf8");
+      const patchedContent = applyCodexUpdateOperation(originalContent, operation.lines);
+      const newPath = operation.moveTo ?? operation.path;
+      const oldTempPath = join(originalRoot, operation.path);
+      const newTempPath = join(modifiedRoot, newPath);
+
+      await mkdir(dirname(oldTempPath), { recursive: true });
+      await mkdir(dirname(newTempPath), { recursive: true });
+      await writeFile(oldTempPath, originalContent);
+      await writeFile(newTempPath, patchedContent);
+
+      const diffBody = await runDiffCommand(
+        `a/${operation.path}`,
+        oldTempPath,
+        `b/${newPath}`,
+        newTempPath
+      );
+
+      if (diffBody.trim().length > 0) {
+        renderedDiffs.push(`diff --git a/${operation.path} b/${newPath}\n${diffBody}`);
+      }
+    }
+
+    return renderedDiffs.join("");
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 export async function materializeWorkerPatch(input: {
   sourcePath: string;
   artifactsDir: string;
@@ -179,7 +510,15 @@ export async function materializeWorkerPatch(input: {
     return undefined;
   }
 
-  const originalPatch = await rewritePatchForRoot(input.sourcePath, patchSource);
+  const canonicalPatch = isCodexApplyPatch(patchSource)
+    ? await convertCodexApplyPatchToUnifiedDiff(input.sourcePath, patchSource)
+    : patchSource;
+
+  if (canonicalPatch.trim().length === 0) {
+    return undefined;
+  }
+
+  const originalPatch = await rewritePatchForRoot(input.sourcePath, canonicalPatch);
   const workspacePatch = originalPatch;
   const workspacePatchFile = join(input.artifactsDir, WORKSPACE_PATCH_FILE);
   const originalPatchFile = join(input.artifactsDir, ORIGINAL_PATCH_FILE);

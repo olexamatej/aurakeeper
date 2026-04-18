@@ -113,6 +113,7 @@ function serializeProject(project: typeof projects.$inferSelect) {
           repositoryUrl: project.repairRepositoryUrl ?? undefined,
           baseCommit: project.repairBaseCommit ?? undefined,
           backend: project.repairBackend ?? undefined,
+          agent: (project.repairAgent ?? "codex") as "codex" | "pi",
           environment: project.repairEnvironment ?? undefined,
           trustLevel: project.repairTrustLevel ?? undefined,
           promotionMode: (project.repairPromotionMode ?? "auto") as "auto" | "manual",
@@ -320,6 +321,7 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
         repairRepositoryUrl: payload.repair?.repositoryUrl ?? null,
         repairBaseCommit: payload.repair?.baseCommit ?? null,
         repairBackend: payload.repair?.backend ?? null,
+        repairAgent: payload.repair?.agent ?? "codex",
         repairEnvironment: payload.repair?.environment ?? null,
         repairTrustLevel: payload.repair?.trustLevel ?? null,
         repairPromotionMode: payload.repair?.promotionMode ?? "auto",
@@ -370,6 +372,12 @@ export function createApp(options: { repairCoordinator?: RepairCoordinator } = {
             : payload.repair === null
               ? null
               : payload.repair.backend ?? null,
+        repairAgent:
+          payload.repair === undefined
+            ? project.repairAgent
+            : payload.repair === null
+              ? null
+              : payload.repair.agent ?? "codex",
         repairEnvironment:
           payload.repair === undefined
             ? project.repairEnvironment

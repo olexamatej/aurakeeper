@@ -91,6 +91,7 @@ export type ProjectRepairSettings = {
   repositoryUrl?: string;
   baseCommit?: string;
   backend?: "docker" | "local" | "auto";
+  agent?: "codex" | "pi";
   environment?: "production" | "hosted" | "local" | "development";
   trustLevel?: "trusted" | "untrusted";
   autoTrigger?: boolean;
@@ -332,6 +333,7 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
       "repositoryUrl",
       "baseCommit",
       "backend",
+      "agent",
       "environment",
       "trustLevel",
       "autoTrigger",
@@ -344,6 +346,7 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
   const repositoryUrl = getOptionalNonEmptyString(value, "repositoryUrl", "repair");
   const baseCommit = getOptionalNonEmptyString(value, "baseCommit", "repair");
   const backend = getOptionalNonEmptyString(value, "backend", "repair");
+  const agent = getOptionalNonEmptyString(value, "agent", "repair");
   const environment = getOptionalNonEmptyString(value, "environment", "repair");
   const trustLevel = getOptionalNonEmptyString(value, "trustLevel", "repair");
   const autoTrigger = getOptionalBoolean(value, "autoTrigger", "repair");
@@ -354,6 +357,14 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
       400,
       "invalid_request",
       "repair.backend must be one of: auto, docker, local"
+    );
+  }
+
+  if (agent && agent !== "codex" && agent !== "pi") {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "repair.agent must be one of: codex, pi"
     );
   }
 
@@ -392,6 +403,7 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
     repositoryUrl,
     baseCommit,
     backend: backend as ProjectRepairSettings["backend"] | undefined,
+    agent: agent as ProjectRepairSettings["agent"] | undefined,
     environment: environment as ProjectRepairSettings["environment"] | undefined,
     trustLevel: trustLevel as ProjectRepairSettings["trustLevel"] | undefined,
     autoTrigger,

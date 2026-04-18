@@ -9,6 +9,7 @@ import { orchestrateRepairForErrorLog } from "./repair-artifacts";
 import { errorLogs, projects } from "./schema";
 import {
   CodexCliAgentClient,
+  PiCliAgentClient,
   type RepairAgentClient,
   type RepairOrchestrationReport,
 } from "./verification";
@@ -16,6 +17,7 @@ import { ApiError, type IssueState } from "./validation";
 
 type ProjectRow = typeof projects.$inferSelect;
 type ErrorLogRow = typeof errorLogs.$inferSelect;
+type RepairAgentProvider = "codex" | "pi";
 
 export type StartRepairResult =
   | {
@@ -31,6 +33,7 @@ export type StartRepairResult =
 
 export type RepairCoordinatorOptions = {
   agentClient?: RepairAgentClient;
+  agentClientFactory?: (provider: RepairAgentProvider) => RepairAgentClient;
 };
 
 export type ActiveRepairStatus = {
@@ -150,12 +153,27 @@ function stateFromActiveStage(
 }
 
 export class RepairCoordinator {
-  private readonly agentClient: RepairAgentClient;
+  private readonly agentClient?: RepairAgentClient;
+  private readonly agentClientFactory: (provider: RepairAgentProvider) => RepairAgentClient;
   private readonly activeJobs = new Map<string, Promise<void>>();
   private readonly activeStatuses = new Map<string, ActiveRepairStatus>();
 
   constructor(options: RepairCoordinatorOptions = {}) {
-    this.agentClient = options.agentClient ?? new CodexCliAgentClient();
+    this.agentClient = options.agentClient;
+    this.agentClientFactory =
+      options.agentClientFactory ??
+      ((provider) =>
+        provider === "pi" ? new PiCliAgentClient() : new CodexCliAgentClient());
+  }
+
+  private resolveAgentClient(project: ProjectRow): RepairAgentClient {
+    if (this.agentClient) {
+      return this.agentClient;
+    }
+
+    const provider: RepairAgentProvider = project.repairAgent === "pi" ? "pi" : "codex";
+
+    return this.agentClientFactory(provider);
   }
 
   startRepair(
@@ -176,6 +194,7 @@ export class RepairCoordinator {
     }
 
     const request = buildRepairRequest(project, errorLog, options.issueSummary);
+    const agentClient = this.resolveAgentClient(project);
     updateErrorLogState(errorLog.id, "repro_started");
 
     const startedAt = new Date().toISOString();
@@ -195,7 +214,7 @@ export class RepairCoordinator {
         errorLogId: errorLog.id,
         request,
       },
-      this.agentClient,
+      agentClient,
       {
         onStageChange: async (update) => {
           const nextStatus: ActiveRepairStatus = {

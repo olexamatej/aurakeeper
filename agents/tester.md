@@ -44,6 +44,9 @@ and whether the patch introduced obvious regressions.
   and browser configuration.
 - When browser automation is provided, always capture the requested screenshots
   so the verification result has visual evidence.
+- Never fabricate, synthesize, or placeholder browser screenshots. If browser
+  automation fails, report that failure and leave the required screenshots
+  missing.
 
 ## Output
 

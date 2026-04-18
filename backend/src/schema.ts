@@ -10,6 +10,7 @@ export const projects = sqliteTable(
     repairRepositoryUrl: text("repair_repository_url"),
     repairBaseCommit: text("repair_base_commit"),
     repairBackend: text("repair_backend"),
+    repairAgent: text("repair_agent"),
     repairEnvironment: text("repair_environment"),
     repairTrustLevel: text("repair_trust_level"),
     repairPromotionMode: text("repair_promotion_mode").default("auto").notNull(),

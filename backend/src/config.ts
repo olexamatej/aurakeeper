@@ -3,6 +3,7 @@ import "dotenv/config";
 import { resolve } from "node:path";
 
 type CodexSandbox = "read-only" | "workspace-write" | "danger-full-access";
+type PiThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 const DEFAULT_ADMIN_TOKEN = "bahno";
 const DEFAULT_CORS_ALLOWED_ORIGINS = ["*"];
@@ -11,6 +12,7 @@ const DEFAULT_ARTIFACTS_PATH = "data/artifacts";
 const DEFAULT_PORT = 3000;
 const DEFAULT_CODEX_PATH = "codex";
 const DEFAULT_CODEX_SANDBOX: CodexSandbox = "workspace-write";
+const DEFAULT_PI_PATH = "pi";
 
 function parsePort(value: string | undefined): number {
   if (!value) {
@@ -49,6 +51,23 @@ function parseCodexSandbox(value: string | undefined): CodexSandbox {
   return DEFAULT_CODEX_SANDBOX;
 }
 
+function parsePiThinkingLevel(
+  value: string | undefined
+): PiThinkingLevel | undefined {
+  if (
+    value === "off" ||
+    value === "minimal" ||
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
+  ) {
+    return value;
+  }
+
+  return undefined;
+}
+
 export const config = {
   adminToken: process.env.ADMIN_TOKEN ?? DEFAULT_ADMIN_TOKEN,
   corsAllowedOrigins: parseCorsAllowedOrigins(process.env.CORS_ALLOWED_ORIGINS),
@@ -66,5 +85,11 @@ export const config = {
     model: process.env.CODEX_MODEL,
     profile: process.env.CODEX_PROFILE,
     sandbox: parseCodexSandbox(process.env.CODEX_SANDBOX),
+  },
+  pi: {
+    path: process.env.PI_PATH ?? DEFAULT_PI_PATH,
+    provider: process.env.PI_PROVIDER,
+    model: process.env.PI_MODEL,
+    thinking: parsePiThinkingLevel(process.env.PI_THINKING),
   },
 };
