@@ -11,6 +11,10 @@ export type HookAgentResult = {
   nextSteps: string[];
 };
 
+type HookAgentResultEnvelope = {
+  output?: HookAgentResult;
+};
+
 const HOOK_OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -70,6 +74,36 @@ function runCommand(command: string, args: string[], cwd: string, stdin: string)
   });
 }
 
+function isHookAgentResult(value: unknown): value is HookAgentResult {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    ("summary" in candidate) &&
+    ("detectedStack" in candidate) &&
+    ("strategy" in candidate) &&
+    Array.isArray(candidate.filesChanged) &&
+    Array.isArray(candidate.nextSteps)
+  );
+}
+
+function parseHookAgentOutput(raw: string): HookAgentResult {
+  const parsed = JSON.parse(raw) as HookAgentResult | HookAgentResultEnvelope;
+
+  if (isHookAgentResult(parsed)) {
+    return parsed;
+  }
+
+  if (isHookAgentResult(parsed.output)) {
+    return parsed.output;
+  }
+
+  throw new Error("Hook agent returned JSON in an unexpected shape.");
+}
+
 export async function runHookAgent(input: {
   cwd: string;
   prompt: string;
@@ -116,11 +150,7 @@ export async function runHookAgent(input: {
       );
     }
 
-    const raw = JSON.parse(await readFile(outputPath, "utf8")) as {
-      output: HookAgentResult;
-    };
-
-    return raw.output;
+    return parseHookAgentOutput(await readFile(outputPath, "utf8"));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
