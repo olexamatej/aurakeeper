@@ -1,4 +1,4 @@
-.PHONY: doctor bootstrap test check build validate validate-all validate-container list run run-all
+.PHONY: doctor bootstrap test check build validate validate-all validate-container list run verify-example run-all
 
 EXAMPLE ?= $(word 2,$(MAKECMDGOALS))
 
@@ -31,6 +31,9 @@ list:
 
 run:
 	@node ../scripts/run-example.mjs "$(EXAMPLE)"
+
+verify-example:
+	@node ../scripts/verify-example.mjs "$(EXAMPLE)"
 
 run-all:
 	@$(MAKE) -C .. run-all

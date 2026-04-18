@@ -4,6 +4,7 @@ import { Button, SafeAreaView, StyleSheet, Text, View } from "react-native";
 const {
   createAuraKeeperReactNativeConnector,
 } = require("../../aurakeeper");
+const { renderProfile } = require("./profile");
 
 const endpoint = process.env.EXPO_PUBLIC_AURAKEEPER_ENDPOINT;
 const apiToken = process.env.EXPO_PUBLIC_AURAKEEPER_API_TOKEN;
@@ -45,7 +46,9 @@ export default function App() {
     setStatus("Triggering unhandled JavaScript exception...");
 
     setTimeout(function onTimeout() {
-      throw new Error("Unhandled Expo example error");
+      renderProfile({
+        id: "guest",
+      });
     }, 0);
   }
 

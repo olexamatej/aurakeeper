@@ -2,7 +2,7 @@
 
 Run these from this directory with Python.
 
-## Uncaught thread exception
+## Broken invoice worker
 
 ```sh
 AURAKEEPER_API_TOKEN=your-token python3 standalone/main.py
@@ -16,5 +16,12 @@ AURAKEEPER_ENDPOINT=http://127.0.0.1:3000/v1/logs/errors \
   python3 standalone/main.py
 ```
 
-The example installs the connector, triggers an uncaught thread exception, and
-flushes before shutdown.
+The example installs the connector and processes an invoice missing customer
+data. That realistic bug raises an uncaught thread exception and flushes before
+shutdown.
+
+The verification command currently fails until the guest fallback is fixed:
+
+```sh
+python3 standalone/test_app.py
+```

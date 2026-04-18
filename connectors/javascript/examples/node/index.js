@@ -1,4 +1,5 @@
 const { createAuraKeeperConnector } = require("../../aurakeeper");
+const { renderWelcome } = require("./profile");
 
 const endpoint =
   process.env.AURAKEEPER_ENDPOINT || "http://127.0.0.1:3000/v1/logs/errors";
@@ -16,7 +17,7 @@ const connector = createAuraKeeperConnector({
   serviceVersion: "1.0.0",
   environment: process.env.NODE_ENV || "development",
   framework: "node",
-  component: "example-worker",
+  component: "profile-page",
   tags: ["backend", "node-example"],
   context: {
     session: {
@@ -27,6 +28,33 @@ const connector = createAuraKeeperConnector({
 
 connector.install();
 
-setTimeout(function triggerUncaughtError() {
-  throw new Error("Uncaught Node.js example error");
-}, 10);
+async function runBrokenProfile() {
+  try {
+    renderWelcome({
+      id: "guest",
+    });
+  } catch (error) {
+    try {
+      await connector.captureException(error, {
+        handled: false,
+        level: "error",
+        request: {
+          method: "GET",
+          path: "/profile",
+        },
+        details: {
+          expectedFallback: "GUEST",
+        },
+      });
+      await connector.flush();
+    } catch (transportError) {
+      console.error(`AuraKeeper transport failed: ${transportError.message}`);
+    }
+    throw error;
+  }
+}
+
+runBrokenProfile().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

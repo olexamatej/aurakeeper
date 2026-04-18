@@ -14,5 +14,12 @@ AURAKEEPER_ENDPOINT=http://127.0.0.1:3000/v1/logs/errors \
   ruby standalone/main.rb
 ```
 
-The example installs the connector and raises an uncaught exception so the
-`at_exit` hook can send the runtime error to AuraKeeper.
+The example installs the connector and renders a profile object missing nested
+profile data. That realistic bug raises an uncaught exception so the `at_exit`
+hook can send the runtime error to AuraKeeper.
+
+The verification command currently fails until the guest fallback is fixed:
+
+```sh
+ruby standalone/profile_test.rb
+```

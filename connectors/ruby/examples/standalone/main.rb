@@ -1,4 +1,5 @@
 require "aurakeeper"
+require_relative "profile"
 
 api_token = ENV["AURAKEEPER_API_TOKEN"]
 
@@ -14,7 +15,7 @@ connector = AuraKeeper.create_aurakeeper_connector(
   service_version: "0.1.0",
   environment: ENV.fetch("RACK_ENV", "development"),
   framework: "stdlib",
-  component: "uncaught-example",
+  component: "profile-renderer",
   tags: ["backend", "ruby"],
   context: {
     device: {
@@ -25,4 +26,4 @@ connector = AuraKeeper.create_aurakeeper_connector(
 
 connector.install
 
-raise ArgumentError, "Uncaught Ruby example failure"
+render_profile({ id: "guest" })
