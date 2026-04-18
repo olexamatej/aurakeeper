@@ -14,6 +14,39 @@ import {
   parseErrorLogRequest,
 } from "./validation";
 
+const DEFAULT_ALLOWED_HEADERS = "Content-Type, X-Admin-Token, X-API-Token";
+const DEFAULT_ALLOWED_METHODS = "GET, POST, OPTIONS";
+
+function getAllowedOrigin(origin: string | null): string | null {
+  if (!origin) {
+    return null;
+  }
+
+  if (config.corsAllowedOrigins.includes("*")) {
+    return "*";
+  }
+
+  return config.corsAllowedOrigins.includes(origin) ? origin : null;
+}
+
+function applyCorsHeaders(request: Request, headers: Record<string, string>) {
+  const allowedOrigin = getAllowedOrigin(request.headers.get("origin"));
+
+  if (!allowedOrigin) {
+    return false;
+  }
+
+  headers["access-control-allow-origin"] = allowedOrigin;
+  headers["access-control-allow-methods"] = DEFAULT_ALLOWED_METHODS;
+  headers["access-control-allow-headers"] =
+    request.headers.get("access-control-request-headers") ??
+    DEFAULT_ALLOWED_HEADERS;
+  headers["access-control-max-age"] = "86400";
+  headers.vary = "Origin";
+
+  return true;
+}
+
 function createProjectId(): string {
   return `proj_${Date.now().toString(36)}${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 }
@@ -55,6 +88,31 @@ function requireProjectByApiToken(apiToken: string | null) {
 }
 
 export const app = new Elysia()
+  .onRequest(({ request, set }) => {
+    const corsHeaders: Record<string, string> = {};
+    const origin = request.headers.get("origin");
+    const corsAllowed = applyCorsHeaders(request, corsHeaders);
+
+    Object.assign(set.headers, corsHeaders);
+
+    if (request.method !== "OPTIONS") {
+      return;
+    }
+
+    if (origin && !corsAllowed) {
+      set.status = 403;
+
+      return {
+        error: "forbidden",
+        message: "Origin is not allowed",
+      };
+    }
+
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  })
   .onError(({ code, error, set }) => {
     if (code === "NOT_FOUND") {
       set.status = 404;
