@@ -116,6 +116,20 @@ Initial SDKs:
 The installable AuraKeeper product CLI lives in [`cli`](./cli). It is separate
 from the runtime-focused Node.js connector in [`connectors/cli`](./connectors/cli).
 
+To install the local CLI from this repository as a global `aurakeeper` command:
+
+```bash
+npm install --prefix cli
+npm run --prefix cli build
+npm install -g ./cli
+```
+
+After that, verify the command is on `PATH` with:
+
+```bash
+aurakeeper --help
+```
+
 Current command surface:
 
 - `aurakeeper hook` inspects the current repository, opens a small interactive
