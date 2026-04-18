@@ -13,9 +13,25 @@ bun run dev
 
 The server reads these environment variables:
 
-- `ADMIN_TOKEN` - expected value for the `X-Admin-Token` header on `POST /v1/projects`. Defaults to `bahno`.
+- `ADMIN_TOKEN` - expected value for local admin endpoints such as project creation, onboarding config, workflow status, and repair job coordination. Defaults to `bahno`.
 - `DATABASE_PATH` - SQLite database location. Defaults to `data/aurakeeper.sqlite`.
 - `PORT` - bind port. Defaults to `3000`.
+
+## Local Workflow Surface
+
+The backend now acts as the local workflow control plane as well as the
+ingestion service. In addition to project creation and error ingestion, it
+supports:
+
+- collector selection for local onboarding
+- local project config storage
+- local project workflow status reads
+- error group listing
+- repair attempt listing
+- repair job claim and completion endpoints for the local worker
+
+The OpenAPI contract in [`../openapi.yaml`](../openapi.yaml) is the source of
+truth for these endpoints.
 
 ## Example Requests
 
@@ -45,3 +61,6 @@ curl -X POST http://localhost:3000/v1/logs/errors \
     "error": { "message": "Cannot read properties of undefined" }
   }'
 ```
+
+See [docs/local-e2e-workflow.md](../docs/local-e2e-workflow.md) for the full
+onboard -> ingest -> queue -> claim -> complete loop.

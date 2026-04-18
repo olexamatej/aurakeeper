@@ -18,6 +18,14 @@ function hasColumn(tableName: string, columnName: string): boolean {
   return columns.some((column) => column.name === columnName);
 }
 
+function hasTable(tableName: string): boolean {
+  const row = sqlite
+    .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName) as { name: string } | null;
+
+  return row?.name === tableName;
+}
+
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY NOT NULL,
@@ -31,7 +39,9 @@ sqlite.exec(`
 
   CREATE INDEX IF NOT EXISTS projects_name_idx
     ON projects (name);
+`);
 
+sqlite.exec(`
   CREATE TABLE IF NOT EXISTS error_logs (
     id TEXT PRIMARY KEY NOT NULL,
     project_id TEXT NOT NULL DEFAULT '',
@@ -58,7 +68,9 @@ sqlite.exec(`
     raw_payload TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+`);
 
+sqlite.exec(`
   CREATE INDEX IF NOT EXISTS error_logs_event_id_idx
     ON error_logs (event_id);
 
@@ -69,13 +81,120 @@ sqlite.exec(`
     ON error_logs (service_name);
 `);
 
-if (!hasColumn("error_logs", "project_id")) {
+if (hasTable("error_logs") && !hasColumn("error_logs", "project_id")) {
   sqlite.exec("ALTER TABLE error_logs ADD COLUMN project_id TEXT NOT NULL DEFAULT '';");
 }
 
 sqlite.exec(`
   CREATE INDEX IF NOT EXISTS error_logs_project_id_idx
     ON error_logs (project_id);
+`);
+
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS project_configs (
+    project_id TEXT PRIMARY KEY NOT NULL,
+    service_name TEXT NOT NULL,
+    repo_path TEXT NOT NULL,
+    runtime TEXT NOT NULL,
+    framework TEXT,
+    package_manager TEXT,
+    install_command TEXT,
+    test_command TEXT,
+    entrypoint_path TEXT,
+    endpoint TEXT,
+    token_env_var TEXT,
+    allowed_repair_paths TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS project_configs_repo_path_idx
+    ON project_configs (repo_path);
+
+  CREATE INDEX IF NOT EXISTS project_configs_service_name_idx
+    ON project_configs (service_name);
+`);
+
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS error_groups (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    event_count INTEGER NOT NULL,
+    representative_log_id TEXT NOT NULL,
+    last_log_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS error_groups_project_fingerprint_idx
+    ON error_groups (project_id, fingerprint);
+
+  CREATE INDEX IF NOT EXISTS error_groups_project_id_idx
+    ON error_groups (project_id);
+
+  CREATE INDEX IF NOT EXISTS error_groups_status_idx
+    ON error_groups (status);
+`);
+
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS repair_jobs (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL,
+    error_group_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    attempts INTEGER NOT NULL,
+    available_at TEXT NOT NULL,
+    locked_at TEXT,
+    worker_id TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS repair_jobs_available_idx
+    ON repair_jobs (status, available_at);
+
+  CREATE INDEX IF NOT EXISTS repair_jobs_error_group_idx
+    ON repair_jobs (error_group_id);
+
+  CREATE INDEX IF NOT EXISTS repair_jobs_project_id_idx
+    ON repair_jobs (project_id);
+`);
+
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS repair_attempts (
+    id TEXT PRIMARY KEY NOT NULL,
+    job_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    error_group_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    worker_id TEXT,
+    replicator_handoff_path TEXT,
+    patch_summary TEXT,
+    verification_command TEXT,
+    verification_exit_code INTEGER,
+    verification_stdout TEXT,
+    verification_stderr TEXT,
+    confidence REAL,
+    run_directory TEXT,
+    result_payload TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS repair_attempts_job_id_idx
+    ON repair_attempts (job_id);
+
+  CREATE INDEX IF NOT EXISTS repair_attempts_project_id_idx
+    ON repair_attempts (project_id);
+
+  CREATE INDEX IF NOT EXISTS repair_attempts_status_idx
+    ON repair_attempts (status);
 `);
 
 export const sqliteDb = sqlite;

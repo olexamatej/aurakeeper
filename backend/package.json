@@ -7,6 +7,7 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.41",
     "@elysiajs/openapi": "^1.4.14",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",

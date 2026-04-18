@@ -19,6 +19,8 @@ tags:
     description: Create projects and issue ingestion tokens.
   - name: Error Logs
     description: Submit structured error events.
+  - name: Local
+    description: Local onboarding and repository configuration endpoints.
 
 paths:
   /v1/projects:
@@ -185,6 +187,277 @@ paths:
               example:
                 error: unauthorized
                 message: API token is missing or invalid
+  /v1/local/collector-selection:
+    post:
+      tags:
+        - Local
+      operationId: selectCollector
+      summary: Select the best local collector for a repository
+      description: >
+        Accepts repository signals from the local CLI and asks the backend to
+        broker a local Codex selector call. Falls back to deterministic
+        heuristics if the selector fails.
+      security:
+        - adminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectorSelectionRequest'
+      responses:
+        '200':
+          description: Collector selection completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectorSelectionResult'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/local/projects/{projectId}/config:
+    put:
+      tags:
+        - Local
+      operationId: upsertProjectConfig
+      summary: Create or update local project repair configuration
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectConfigRequest'
+      responses:
+        '200':
+          description: Project config updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectConfig'
+        '201':
+          description: Project config created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectConfig'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/local/projects/{projectId}/status:
+    get:
+      tags:
+        - Local
+      operationId: getLocalProjectStatus
+      summary: Get local project workflow status
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Local project status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalProjectStatus'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/local/error-groups:
+    get:
+      tags:
+        - Local
+      operationId: listLocalErrorGroups
+      summary: List local error groups for a project
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - in: query
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Error groups for the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorGroupList'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/local/repair-attempts:
+    get:
+      tags:
+        - Local
+      operationId: listLocalRepairAttempts
+      summary: List local repair attempts for a project
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - in: query
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repair attempts for the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairAttemptList'
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/local/repair-jobs/claim:
+    post:
+      tags:
+        - Local
+      operationId: claimLocalRepairJob
+      summary: Claim the next pending local repair job
+      security:
+        - adminTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepairJobClaimRequest'
+      responses:
+        '200':
+          description: Repair job claim result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairJobClaimResponse'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Job exists but cannot be materialized due to missing configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/local/repair-jobs/{jobId}/complete:
+    post:
+      tags:
+        - Local
+      operationId: completeLocalRepairJob
+      summary: Complete a local repair job attempt
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepairJobCompleteRequest'
+      responses:
+        '200':
+          description: Repair job completion recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairJobCompleted'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Repair attempt not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -232,6 +505,605 @@ components:
           type: string
           description: Project token to include in the X-API-Token header for log ingestion.
         createdAt:
+          type: string
+          format: date-time
+
+    CollectorInventoryItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - runtime
+        - description
+        - installStrategy
+      properties:
+        id:
+          type: string
+        runtime:
+          type: string
+        framework:
+          type: string
+        description:
+          type: string
+        installStrategy:
+          type: string
+          enum:
+            - dependency
+            - vendor
+
+    CollectorSelectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - repoPath
+        - runtimeCandidates
+        - frameworkCandidates
+        - topLevelFiles
+        - lockfiles
+        - likelyEntrypoints
+        - collectorInventory
+        - autoPatchAllowed
+      properties:
+        repoPath:
+          type: string
+        packageManager:
+          type: string
+        runtimeCandidates:
+          type: array
+          items:
+            type: string
+        frameworkCandidates:
+          type: array
+          items:
+            type: string
+        topLevelFiles:
+          type: array
+          items:
+            type: string
+        lockfiles:
+          type: array
+          items:
+            type: string
+        likelyEntrypoints:
+          type: array
+          items:
+            type: string
+        packageManifest:
+          $ref: '#/components/schemas/JsonObject'
+        collectorInventory:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectorInventoryItem'
+        autoPatchAllowed:
+          type: boolean
+
+    CollectorSelectionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - collectorId
+        - runtime
+        - strategy
+        - bootstrapFile
+        - patchMode
+        - confidence
+        - reason
+        - edits
+        - warnings
+        - selectorSource
+      properties:
+        collectorId:
+          type: string
+        runtime:
+          type: string
+        framework:
+          type: string
+        strategy:
+          type: string
+          enum:
+            - dependency
+            - vendor
+            - manual_only
+        bootstrapFile:
+          type: string
+        entrypointPath:
+          type: string
+        patchMode:
+          type: string
+          enum:
+            - auto_patch
+            - generate_import_only
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        reason:
+          type: string
+        edits:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        selectorSource:
+          type: string
+          enum:
+            - codex
+            - fallback
+
+    ProjectConfigRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - serviceName
+        - repoPath
+        - runtime
+        - allowedRepairPaths
+      properties:
+        serviceName:
+          type: string
+        repoPath:
+          type: string
+        runtime:
+          type: string
+        framework:
+          type: string
+        packageManager:
+          type: string
+        installCommand:
+          type: string
+        testCommand:
+          type: string
+        entrypointPath:
+          type: string
+        endpoint:
+          type: string
+        tokenEnvVar:
+          type: string
+        allowedRepairPaths:
+          type: array
+          items:
+            type: string
+
+    ProjectConfig:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - serviceName
+        - repoPath
+        - runtime
+        - allowedRepairPaths
+        - updatedAt
+      properties:
+        projectId:
+          type: string
+        serviceName:
+          type: string
+        repoPath:
+          type: string
+        runtime:
+          type: string
+        framework:
+          type: string
+        packageManager:
+          type: string
+        installCommand:
+          type: string
+        testCommand:
+          type: string
+        entrypointPath:
+          type: string
+        endpoint:
+          type: string
+        tokenEnvVar:
+          type: string
+        allowedRepairPaths:
+          type: array
+          items:
+            type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    ErrorGroup:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - fingerprint
+        - status
+        - firstSeenAt
+        - lastSeenAt
+        - eventCount
+        - representativeLogId
+        - lastLogId
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        fingerprint:
+          type: string
+        status:
+          type: string
+          enum:
+            - open
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        eventCount:
+          type: integer
+        representativeLogId:
+          type: string
+        lastLogId:
+          type: string
+
+    ErrorGroupList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorGroup'
+
+    RepairAttempt:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - jobId
+        - projectId
+        - errorGroupId
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        jobId:
+          type: string
+        projectId:
+          type: string
+        errorGroupId:
+          type: string
+        status:
+          type: string
+          enum:
+            - running
+            - patched
+            - failed
+            - needs_manual_review
+        workerId:
+          type: string
+        replicatorHandoffPath:
+          type: string
+        patchSummary:
+          type: string
+        verificationCommand:
+          type: string
+        verificationExitCode:
+          type: integer
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        runDirectory:
+          type: string
+        resultPayload:
+          $ref: '#/components/schemas/JsonObject'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+
+    RepairAttemptList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepairAttempt'
+
+    RepairJobClaimRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - workerId
+      properties:
+        workerId:
+          type: string
+
+    RepairJob:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - errorGroupId
+        - attemptNumber
+        - status
+        - availableAt
+        - claimedAt
+        - workerId
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        errorGroupId:
+          type: string
+        attemptNumber:
+          type: integer
+        status:
+          type: string
+          enum:
+            - claimed
+        availableAt:
+          type: string
+          format: date-time
+        claimedAt:
+          type: string
+          format: date-time
+        workerId:
+          type: string
+
+    RepairJobClaimedAttempt:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - workerId
+        - createdAt
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - running
+        workerId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    LocalProjectStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - project
+        - projectConfig
+        - queue
+        - errorGroups
+        - repairAttempts
+      properties:
+        project:
+          type: object
+          additionalProperties: false
+          required:
+            - id
+            - name
+            - createdAt
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+        projectConfig:
+          $ref: '#/components/schemas/ProjectConfig'
+        queue:
+          type: object
+          additionalProperties: false
+          required:
+            - pending
+            - claimed
+            - completed
+            - failed
+            - manualReview
+          properties:
+            pending:
+              type: integer
+            claimed:
+              type: integer
+            completed:
+              type: integer
+            failed:
+              type: integer
+            manualReview:
+              type: integer
+        errorGroups:
+          type: object
+          additionalProperties: false
+          required:
+            - total
+            - open
+            - latest
+          properties:
+            total:
+              type: integer
+            open:
+              type: integer
+            latest:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - id
+                  - status
+                  - lastSeenAt
+                  - eventCount
+                  - representativeLogId
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                  lastSeenAt:
+                    type: string
+                    format: date-time
+                  eventCount:
+                    type: integer
+                  representativeLogId:
+                    type: string
+        repairAttempts:
+          type: object
+          additionalProperties: false
+          required:
+            - total
+            - running
+            - patched
+            - failed
+            - manualReview
+            - latest
+          properties:
+            total:
+              type: integer
+            running:
+              type: integer
+            patched:
+              type: integer
+            failed:
+              type: integer
+            manualReview:
+              type: integer
+            latest:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  - id
+                  - jobId
+                  - status
+                  - createdAt
+                properties:
+                  id:
+                    type: string
+                  jobId:
+                    type: string
+                  status:
+                    type: string
+                  createdAt:
+                    type: string
+                    format: date-time
+                  completedAt:
+                    type: string
+                    format: date-time
+                  confidence:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+
+    RepairJobClaimResponse:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - job
+          properties:
+            job:
+              type: 'null'
+        - type: object
+          additionalProperties: false
+          required:
+            - job
+            - attempt
+            - projectConfig
+            - errorGroup
+            - representativeLog
+          properties:
+            job:
+              $ref: '#/components/schemas/RepairJob'
+            attempt:
+              $ref: '#/components/schemas/RepairJobClaimedAttempt'
+            projectConfig:
+              $ref: '#/components/schemas/ProjectConfig'
+            errorGroup:
+              $ref: '#/components/schemas/ErrorGroup'
+            representativeLog:
+              $ref: '#/components/schemas/JsonObject'
+
+    RepairJobCompleteRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - attemptId
+        - status
+      properties:
+        attemptId:
+          type: string
+        status:
+          type: string
+          enum:
+            - patched
+            - failed
+            - needs_manual_review
+        replicatorHandoffPath:
+          type: string
+        patchSummary:
+          type: string
+        verificationCommand:
+          type: string
+        verificationExitCode:
+          type: integer
+        verificationStdout:
+          type: string
+        verificationStderr:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        runDirectory:
+          type: string
+        resultPayload:
+          $ref: '#/components/schemas/JsonObject'
+        failureReason:
+          type: string
+
+    RepairJobCompleted:
+      type: object
+      additionalProperties: false
+      required:
+        - jobId
+        - attemptId
+        - status
+        - completedAt
+      properties:
+        jobId:
+          type: string
+        attemptId:
+          type: string
+        status:
+          type: string
+          enum:
+            - patched
+            - failed
+            - needs_manual_review
+        completedAt:
           type: string
           format: date-time
 

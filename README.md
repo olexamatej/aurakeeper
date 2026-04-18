@@ -26,6 +26,11 @@ captures the right foundation: service metadata, source runtime, normalized
 error fields, stack traces, arbitrary details, request/user/session context, and
 tags.
 
+The current repo also includes a local workflow surface for onboarding a repo,
+persisting local repair config, queueing repair jobs, and reporting local fix
+attempt status. See [docs/local-e2e-workflow.md](./docs/local-e2e-workflow.md)
+for the concrete end-to-end flow.
+
 ## Product Shape
 
 AuraKeeper should sit between error reporting and code repair.
