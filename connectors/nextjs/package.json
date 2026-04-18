@@ -1,0 +1,11 @@
+{
+  "name": "@aurakeeper/nextjs-connector",
+  "version": "0.1.0",
+  "description": "Next.js-focused JavaScript connector for sending application errors to AuraKeeper.",
+  "main": "./index.js",
+  "dependencies": {
+    "@aurakeeper/javascript-connector": "file:../javascript"
+  },
+  "type": "commonjs",
+  "license": "UNLICENSED"
+}

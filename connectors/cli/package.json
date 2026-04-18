@@ -1,0 +1,20 @@
+{
+  "name": "@aurakeeper/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AuraKeeper connector for Node.js CLI and local development workflows.",
+  "main": "aurakeeper.js",
+  "files": [
+    "aurakeeper.js",
+    "README.md",
+    "examples"
+  ],
+  "keywords": [
+    "aurakeeper",
+    "cli",
+    "nodejs",
+    "error-reporting",
+    "local-development"
+  ],
+  "license": "UNLICENSED"
+}

@@ -217,8 +217,16 @@ Small SDKs should make the ingestion API easy to adopt.
 
 Initial SDKs:
 
-- JavaScript/TypeScript for browser, Node.js, and Next.js
-- Python for FastAPI, Django, workers, and CLI tools
+- JavaScript for browser and Node.js in [`connectors/javascript`](./connectors/javascript)
+- Python for backend, workers, and CLI tools in [`connectors/python`](./connectors/python)
+- Next.js in [`connectors/nextjs`](./connectors/nextjs)
+- React Native in [`connectors/react-native`](./connectors/react-native)
+- CLI and local development in [`connectors/cli`](./connectors/cli)
+- Go in [`connectors/go`](./connectors/go)
+- JVM in [`connectors/jvm`](./connectors/jvm)
+- .NET in [`connectors/dotnet`](./connectors/dotnet)
+- Ruby in [`connectors/ruby`](./connectors/ruby)
+- PHP in [`connectors/php`](./connectors/php)
 
 SDK responsibilities:
 
