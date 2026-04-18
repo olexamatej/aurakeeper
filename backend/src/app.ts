@@ -1,5 +1,5 @@
 import { Elysia } from "elysia";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { config } from "./config";
 import { db } from "./db";
@@ -54,6 +54,24 @@ function requireProjectByApiToken(apiToken: string | null) {
   }
 
   return project;
+}
+
+function serializeErrorLog(row: typeof errorLogs.$inferSelect) {
+  let payload: ReturnType<typeof JSON.parse> | null = null;
+
+  try {
+    payload = JSON.parse(row.rawPayload);
+  } catch {
+    payload = null;
+  }
+
+  return {
+    id: row.id,
+    state: row.state as IssueState,
+    receivedAt: row.receivedAt,
+    createdAt: row.createdAt,
+    ...(payload ?? {}),
+  };
 }
 
 export const app = new Elysia()
@@ -125,6 +143,17 @@ export const app = new Elysia()
       token,
       createdAt,
     };
+  })
+  .get("/v1/logs/errors", ({ request }) => {
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+
+    return db
+      .select()
+      .from(errorLogs)
+      .where(eq(errorLogs.projectId, project.id))
+      .orderBy(desc(errorLogs.createdAt))
+      .all()
+      .map(serializeErrorLog);
   })
   .post("/v1/logs/errors", async ({ request, set }) => {
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));

@@ -46,4 +46,11 @@ curl -X POST http://localhost:3000/v1/logs/errors \
   }'
 ```
 
+List stored error logs for the project:
+
+```bash
+curl http://localhost:3000/v1/logs/errors \
+  -H 'X-API-Token: <project-token>'
+```
+
 Accepted error logs are created with the default workflow state `new_error`.

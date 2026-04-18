@@ -71,6 +71,60 @@ paths:
                 error: unauthorized
                 message: Admin token is missing or invalid
   /v1/logs/errors:
+    get:
+      tags:
+        - Error Logs
+      operationId: listErrorLogs
+      summary: List error logs
+      description: >
+        Returns error logs for the project identified by the supplied API token,
+        ordered by most recently created first.
+      security:
+        - apiTokenAuth: []
+      responses:
+        '200':
+          description: Error logs for the authenticated project
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ErrorLog'
+              example:
+                - id: log_01HSV6M2KQ4T1TA7R8P8W9J1BM
+                  state: new_error
+                  receivedAt: "2026-04-18T08:32:18Z"
+                  createdAt: "2026-04-18T08:32:18Z"
+                  eventId: 767d5a66-2b41-4c2e-90e8-6dd0149491df
+                  occurredAt: "2026-04-18T08:32:17Z"
+                  level: error
+                  platform: web
+                  environment: production
+                  service:
+                    name: aura-web
+                    version: "2026.04.18"
+                  source:
+                    runtime: node
+                    language: typescript
+                    framework: next.js
+                    component: app-router
+                  error:
+                    type: TypeError
+                    message: Cannot read properties of undefined
+                    handled: false
+                  context:
+                    tags:
+                      - frontend
+                      - nextjs
+        '401':
+          description: Missing or invalid API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: unauthorized
+                message: API token is missing or invalid
     post:
       tags:
         - Error Logs
@@ -307,6 +361,29 @@ components:
           $ref: '#/components/schemas/ErrorPayload'
         context:
           $ref: '#/components/schemas/ErrorContext'
+
+    ErrorLog:
+      allOf:
+        - $ref: '#/components/schemas/ErrorLogRequest'
+        - type: object
+          additionalProperties: false
+          required:
+            - id
+            - state
+            - receivedAt
+            - createdAt
+          properties:
+            id:
+              type: string
+              description: Server-generated identifier for the stored log.
+            state:
+              $ref: '#/components/schemas/ErrorLogState'
+            receivedAt:
+              type: string
+              format: date-time
+            createdAt:
+              type: string
+              format: date-time
 
     ServiceDescriptor:
       type: object
