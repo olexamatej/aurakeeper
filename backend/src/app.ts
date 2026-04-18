@@ -5,16 +5,14 @@ import { config } from "./config";
 import { db } from "./db";
 import { errorLogs, projects } from "./schema";
 import { openapi } from "@elysiajs/openapi";
+import { insertErrorLog, serializeErrorLog } from "./error-logs";
+import { createSentrySource, pollSentrySource } from "./sentry";
 import {
   ApiError,
-  IssueState,
   parseCreateProjectRequest,
+  parseCreateSentrySourceRequest,
   parseErrorLogRequest,
 } from "./validation";
-
-function createLogId(): string {
-  return `log_${Date.now().toString(36)}${crypto.randomUUID().replaceAll("-", "").slice(0, 16)}`;
-}
 
 function createProjectId(): string {
   return `proj_${Date.now().toString(36)}${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
@@ -54,24 +52,6 @@ function requireProjectByApiToken(apiToken: string | null) {
   }
 
   return project;
-}
-
-function serializeErrorLog(row: typeof errorLogs.$inferSelect) {
-  let payload: ReturnType<typeof JSON.parse> | null = null;
-
-  try {
-    payload = JSON.parse(row.rawPayload);
-  } catch {
-    payload = null;
-  }
-
-  return {
-    id: row.id,
-    state: row.state as IssueState,
-    receivedAt: row.receivedAt,
-    createdAt: row.createdAt,
-    ...(payload ?? {}),
-  };
 }
 
 export const app = new Elysia()
@@ -158,47 +138,19 @@ export const app = new Elysia()
   .post("/v1/logs/errors", async ({ request, set }) => {
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));
     const payload = parseErrorLogRequest(await parseJsonBody(request));
-    const receivedAt = new Date().toISOString();
-    const id = createLogId();
-    const initialState: IssueState = "new_error";
-
-    db.insert(errorLogs)
-      .values({
-        id,
-        projectId: project.id,
-        eventId: payload.eventId,
-        occurredAt: payload.occurredAt,
-        receivedAt,
-        level: payload.level,
-        platform: payload.platform,
-        environment: payload.environment,
-        serviceName: payload.service.name,
-        serviceVersion: payload.service.version,
-        serviceInstanceId: payload.service.instanceId,
-        sourceRuntime: payload.source.runtime,
-        sourceLanguage: payload.source.language,
-        sourceFramework: payload.source.framework,
-        sourceComponent: payload.source.component,
-        errorType: payload.error.type,
-        errorMessage: payload.error.message,
-        errorCode: payload.error.code,
-        errorStack: payload.error.stack,
-        errorHandled: payload.error.handled,
-        errorDetails: payload.error.details
-          ? JSON.stringify(payload.error.details)
-          : null,
-        context: payload.context ? JSON.stringify(payload.context) : null,
-        rawPayload: JSON.stringify(payload),
-        createdAt: receivedAt,
-      })
-      .run();
-
     set.status = 202;
+    return insertErrorLog(project.id, payload);
+  })
+  .post("/v1/sources/sentry", async ({ request, set }) => {
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    const payload = parseCreateSentrySourceRequest(await parseJsonBody(request));
 
-    return {
-      id,
-      state: initialState,
-      status: "accepted" as const,
-      receivedAt,
-    };
+    set.status = 201;
+
+    return createSentrySource(project.id, payload);
+  })
+  .post("/v1/sources/sentry/:sourceId/poll", async ({ request, params }) => {
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+
+    return pollSentrySource(project.id, params.sourceId);
   });

@@ -26,9 +26,22 @@ type ServiceDescriptor = {
   instanceId?: string;
 };
 
+type ServiceDescriptorOverrides = {
+  name?: string;
+  version?: string;
+  instanceId?: string;
+};
+
 type ErrorSource = {
   runtime: string;
   language: string;
+  framework?: string;
+  component?: string;
+};
+
+type ErrorSourceOverrides = {
+  runtime?: string;
+  language?: string;
   framework?: string;
   component?: string;
 };
@@ -65,6 +78,17 @@ export type ErrorLogRequest = {
 
 export type CreateProjectRequest = {
   name: string;
+};
+
+export type CreateSentrySourceRequest = {
+  organizationSlug: string;
+  projectSlug: string;
+  authToken: string;
+  baseUrl?: string;
+  environment?: string;
+  maxEventsPerPoll?: number;
+  service?: ServiceDescriptorOverrides;
+  source?: ErrorSourceOverrides;
 };
 
 export type IssueState = (typeof ISSUE_STATES)[number];
@@ -166,6 +190,24 @@ function getOptionalString(
   return candidate;
 }
 
+function getOptionalNonEmptyString(
+  value: Record<string, unknown>,
+  key: string,
+  field: string
+): string | undefined {
+  const candidate = value[key];
+
+  if (candidate === undefined) {
+    return undefined;
+  }
+
+  if (typeof candidate !== "string" || candidate.length === 0) {
+    throw new ApiError(400, "invalid_request", `${field}.${key} must be a non-empty string`);
+  }
+
+  return candidate;
+}
+
 function getOptionalBoolean(
   value: Record<string, unknown>,
   key: string,
@@ -182,6 +224,24 @@ function getOptionalBoolean(
   }
 
   return candidate;
+}
+
+function getOptionalInteger(
+  value: Record<string, unknown>,
+  key: string,
+  field: string
+): number | undefined {
+  const candidate = value[key];
+
+  if (candidate === undefined) {
+    return undefined;
+  }
+
+  if (!Number.isInteger(candidate)) {
+    throw new ApiError(400, "invalid_request", `${field}.${key} must be an integer`);
+  }
+
+  return candidate as number;
 }
 
 function getOptionalJsonObject(
@@ -213,6 +273,31 @@ function parseServiceDescriptor(value: unknown): ServiceDescriptor {
   };
 }
 
+function parseServiceDescriptorOverrides(
+  value: unknown
+): ServiceDescriptorOverrides | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  assertObject(value, "service");
+  assertAllowedKeys(value, ["name", "version", "instanceId"], "service");
+
+  const name = getOptionalNonEmptyString(value, "name", "service");
+  const version = getOptionalNonEmptyString(value, "version", "service");
+  const instanceId = getOptionalNonEmptyString(value, "instanceId", "service");
+
+  if (name === undefined && version === undefined && instanceId === undefined) {
+    return undefined;
+  }
+
+  return {
+    name,
+    version,
+    instanceId,
+  };
+}
+
 function parseErrorSource(value: unknown): ErrorSource {
   assertObject(value, "source");
   assertAllowedKeys(value, ["runtime", "language", "framework", "component"], "source");
@@ -222,6 +307,36 @@ function parseErrorSource(value: unknown): ErrorSource {
     language: getRequiredString(value, "language", "source"),
     framework: getOptionalString(value, "framework", "source"),
     component: getOptionalString(value, "component", "source"),
+  };
+}
+
+function parseErrorSourceOverrides(value: unknown): ErrorSourceOverrides | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  assertObject(value, "source");
+  assertAllowedKeys(value, ["runtime", "language", "framework", "component"], "source");
+
+  const runtime = getOptionalNonEmptyString(value, "runtime", "source");
+  const language = getOptionalNonEmptyString(value, "language", "source");
+  const framework = getOptionalNonEmptyString(value, "framework", "source");
+  const component = getOptionalNonEmptyString(value, "component", "source");
+
+  if (
+    runtime === undefined &&
+    language === undefined &&
+    framework === undefined &&
+    component === undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    runtime,
+    language,
+    framework,
+    component,
   };
 }
 
@@ -350,5 +465,56 @@ export function parseCreateProjectRequest(value: unknown): CreateProjectRequest 
 
   return {
     name: getRequiredString(value, "name", "body"),
+  };
+}
+
+export function parseCreateSentrySourceRequest(
+  value: unknown
+): CreateSentrySourceRequest {
+  assertObject(value, "body");
+  assertAllowedKeys(
+    value,
+    [
+      "organizationSlug",
+      "projectSlug",
+      "authToken",
+      "baseUrl",
+      "environment",
+      "maxEventsPerPoll",
+      "service",
+      "source",
+    ],
+    "body"
+  );
+
+  const baseUrl = getOptionalNonEmptyString(value, "baseUrl", "body");
+
+  if (baseUrl !== undefined) {
+    try {
+      new URL(baseUrl);
+    } catch {
+      throw new ApiError(400, "invalid_request", "body.baseUrl must be a valid URL");
+    }
+  }
+
+  const maxEventsPerPoll = getOptionalInteger(value, "maxEventsPerPoll", "body");
+
+  if (maxEventsPerPoll !== undefined && (maxEventsPerPoll < 1 || maxEventsPerPoll > 500)) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "body.maxEventsPerPoll must be between 1 and 500"
+    );
+  }
+
+  return {
+    organizationSlug: getRequiredString(value, "organizationSlug", "body"),
+    projectSlug: getRequiredString(value, "projectSlug", "body"),
+    authToken: getRequiredString(value, "authToken", "body"),
+    baseUrl,
+    environment: getOptionalNonEmptyString(value, "environment", "body"),
+    maxEventsPerPoll,
+    service: parseServiceDescriptorOverrides(value.service),
+    source: parseErrorSourceOverrides(value.source),
   };
 }
