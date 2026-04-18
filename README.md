@@ -120,8 +120,8 @@ Current command surface:
 
 - `aurakeeper hook` inspects the current repository, opens a small interactive
   TUI with `@clack/prompts`, and then runs a Codex-backed agent in that
-  directory to add an AuraKeeper hook using either a premade pattern or a
-  project-specific implementation.
+  directory to add either an AuraKeeper hook or a Sentry-based hook using
+  either a premade pattern or a project-specific implementation.
 
 ## Connector Examples
 

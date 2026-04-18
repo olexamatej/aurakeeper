@@ -4,10 +4,10 @@ import { commands } from "./commands/index.js";
 
 function usage(): string {
   return [
-    "Usage: aurakeeper <command>",
+    "Usage: aurakeeper <command> [options]",
     "",
     "Commands:",
-    "  hook    Add an AuraKeeper hook to the current project using an agent",
+    "  hook    Add an AuraKeeper or Sentry hook to the current project using an agent",
   ].join("\n");
 }
 

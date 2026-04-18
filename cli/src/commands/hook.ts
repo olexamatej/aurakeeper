@@ -16,6 +16,47 @@ import { runHookAgent } from "../lib/codex.js";
 import { inspectProject } from "../lib/project.js";
 
 type HookPreference = "auto" | "template" | "project_specific";
+type HookProvider = "aurakeeper" | "sentry";
+
+function usage(): string {
+  return [
+    "Usage: aurakeeper hook [--provider aurakeeper|sentry]",
+    "",
+    "Options:",
+    "  --provider <name>   Hook provider to install",
+  ].join("\n");
+}
+
+function parseProviderArg(argv: string[]): HookProvider | null {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === "--help" || arg === "-h") {
+      console.log(usage());
+      process.exit(0);
+    }
+
+    if (arg === "--provider") {
+      const value = argv[index + 1];
+      if (value === "aurakeeper" || value === "sentry") {
+        return value;
+      }
+
+      throw new Error("Expected --provider to be one of: aurakeeper, sentry.");
+    }
+
+    if (arg.startsWith("--provider=")) {
+      const value = arg.slice("--provider=".length);
+      if (value === "aurakeeper" || value === "sentry") {
+        return value;
+      }
+
+      throw new Error("Expected --provider to be one of: aurakeeper, sentry.");
+    }
+  }
+
+  return null;
+}
 
 function assertNotCancelled<T>(value: T | symbol): T {
   if (isCancel(value)) {
@@ -29,6 +70,7 @@ function assertNotCancelled<T>(value: T | symbol): T {
 function buildPrompt(input: {
   cwd: string;
   projectName: string;
+  provider: HookProvider;
   hookPreference: HookPreference;
   ingestionConfig: {
     endpoint: string | null;
@@ -38,7 +80,8 @@ function buildPrompt(input: {
   playbook: string;
 }): string {
   const ingestionLines =
-    input.ingestionConfig.endpoint || input.ingestionConfig.apiToken
+    input.provider === "aurakeeper" &&
+    (input.ingestionConfig.endpoint || input.ingestionConfig.apiToken)
       ? [
           "User-supplied ingestion setup:",
           `- Endpoint: ${input.ingestionConfig.endpoint ?? "not provided"}`,
@@ -49,16 +92,33 @@ function buildPrompt(input: {
         ]
       : [];
 
+  const providerInstructions =
+    input.provider === "sentry"
+      ? [
+          "Install Sentry-based error capture instead of AuraKeeper runtime hooks.",
+          "Use the smallest framework-appropriate Sentry integration for the detected stack.",
+          "Use environment variables for Sentry credentials and configuration, especially `SENTRY_DSN`.",
+          "Do not add AuraKeeper ingestion hooks unless the project already depends on them and the user explicitly asked for both.",
+          "If documentation or setup changes are needed, explain how this Sentry-based setup can feed AuraKeeper through the existing Sentry source integration.",
+        ]
+      : [
+          "Install AuraKeeper error capture hooks for the current project.",
+          "Use environment variables for AuraKeeper credentials and configuration, especially `AURAKEEPER_API_TOKEN` and `AURAKEEPER_ENDPOINT` when needed.",
+        ];
+
   return [
     "You are the AuraKeeper hook installer agent.",
-    "Work inside the target repository and make the smallest safe integration that adds AuraKeeper error capture to the current project.",
+    "Work inside the target repository and make the smallest safe integration that adds the requested error capture path to the current project.",
     "You may reuse the premade hook patterns from the playbook or create a project-specific implementation when the project structure requires it.",
     "Prefer the user's existing conventions, scripts, dependency manager, and startup path.",
     "Do not hardcode secrets. Use environment variables for all tokens and endpoints.",
     "If documentation or setup changes are needed, update them.",
     "Return only a JSON object matching the provided schema.",
     "",
+    `Hook provider: ${input.provider}`,
     `Hook preference: ${input.hookPreference}`,
+    "",
+    ...providerInstructions,
     "",
     ...ingestionLines,
     "Project inspection:",
@@ -81,6 +141,8 @@ function buildPrompt(input: {
 }
 
 export async function runHookCommand(): Promise<void> {
+  const providerArg = parseProviderArg(process.argv.slice(3));
+
   intro("AuraKeeper hook");
 
   const cwd = process.cwd();
@@ -113,6 +175,27 @@ export async function runHookCommand(): Promise<void> {
     })
   );
 
+  const provider = providerArg
+    ? providerArg
+    : assertNotCancelled(
+        await select<HookProvider>({
+          message: "Which hook provider should the installer add?",
+          initialValue: "aurakeeper",
+          options: [
+            {
+              value: "aurakeeper",
+              label: "AuraKeeper",
+              hint: "Install our direct runtime hooks.",
+            },
+            {
+              value: "sentry",
+              label: "Sentry",
+              hint: "Install Sentry instead of AuraKeeper hooks.",
+            },
+          ],
+        })
+      );
+
   const hookPreference = assertNotCancelled(
     await select<HookPreference>({
       message: "How should the installer approach this project?",
@@ -137,12 +220,15 @@ export async function runHookCommand(): Promise<void> {
     })
   );
 
-  const configureIngestion = assertNotCancelled(
-    await confirm({
-      message: "Provide ingestion endpoint settings now?",
-      initialValue: false,
-    })
-  );
+  const configureIngestion =
+    provider === "aurakeeper"
+      ? assertNotCancelled(
+          await confirm({
+            message: "Provide ingestion endpoint settings now?",
+            initialValue: false,
+          })
+        )
+      : false;
 
   let ingestionEndpoint: string | null = null;
   let ingestionApiToken: string | null = null;
@@ -208,6 +294,7 @@ export async function runHookCommand(): Promise<void> {
       prompt: buildPrompt({
         cwd,
         projectName: projectName.trim(),
+        provider,
         hookPreference,
         ingestionConfig: {
           endpoint: ingestionEndpoint,

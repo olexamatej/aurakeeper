@@ -3,6 +3,10 @@
 The `aurakeeper hook` command should make the smallest safe integration for the
 current project.
 
+When the selected provider is Sentry, apply the same minimal-edit rules but use
+the project's existing Sentry conventions and environment variables such as
+`SENTRY_DSN` instead of AuraKeeper runtime hooks.
+
 ## Integration rules
 
 - Prefer minimal, targeted edits over broad refactors.
