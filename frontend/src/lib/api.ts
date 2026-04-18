@@ -1,4 +1,4 @@
-import type { ErrorLog, StoredProject } from "./types"
+import type { ErrorLog, RepairAttempt, StoredProject } from "./types"
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000"
 const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? ""
@@ -45,4 +45,42 @@ export async function listErrorLogs(apiToken: string): Promise<ErrorLog[]> {
     },
   })
   return handleResponse<ErrorLog[]>(response)
+}
+
+export async function listRepairAttempts(
+  apiToken: string,
+  logId: string,
+): Promise<RepairAttempt[]> {
+  const response = await fetch(`${API_URL}/v1/logs/errors/${logId}/repair-attempts`, {
+    headers: {
+      "X-API-Token": apiToken,
+    },
+  })
+  return handleResponse<RepairAttempt[]>(response)
+}
+
+export function artifactUrl(logId: string, artifactId: string): string {
+  return `${API_URL}/v1/logs/errors/${logId}/artifacts/${artifactId}`
+}
+
+export async function fetchArtifact(
+  apiToken: string,
+  logId: string,
+  artifactId: string,
+): Promise<Blob> {
+  const response = await fetch(artifactUrl(logId, artifactId), {
+    headers: {
+      "X-API-Token": apiToken,
+    },
+  })
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({
+      error: "unknown",
+      message: response.statusText,
+    }))
+    throw new ApiError(response.status, body.error, body.message)
+  }
+
+  return response.blob()
 }

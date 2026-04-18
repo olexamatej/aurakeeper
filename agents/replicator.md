@@ -15,11 +15,16 @@ replicated, and what most likely caused it.
 - repository checkout at the affected version
 - project instructions and allowed commands
 - install, test, dev, replay, or diagnostic commands when configured
+- optional browser automation capability for frontend bugs powered by `agent-browser`
 
 ## Responsibilities
 
 1. Inspect the supplied error and identify the most likely failing code path.
 2. Run the smallest useful command needed to reproduce or confirm the failure.
+   When browser automation is supplied, prefer `agent-browser` for UI flows:
+   open the target page, snapshot for refs, interact using refs, then re-snapshot
+   and save at least the required screenshot files into the supplied
+   `screenshotDir`.
 3. Capture the exact command, output, exit code, and relevant environment notes.
 4. Narrow the issue to a clear cause when the evidence supports it.
 5. Write a short handoff file for the Worker Agent.
@@ -32,6 +37,10 @@ replicated, and what most likely caused it.
 - Do not run destructive commands.
 - Do not hide failed reproduction attempts; include what was tried.
 - If the failure cannot be reproduced, explain the missing context or mismatch.
+- If browser automation is provided, keep the run scoped to the supplied app URL,
+  workspace, and browser configuration.
+- When browser automation is provided, always capture the requested screenshots,
+  even if the reproduction only gets partway through the flow.
 
 ## Handoff File
 

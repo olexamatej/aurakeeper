@@ -21,6 +21,8 @@ tags:
     description: Submit structured error events.
   - name: Source Integrations
     description: Configure upstream providers that AuraKeeper can poll for errors.
+  - name: Repair Attempts
+    description: List and fetch persisted repair attempt artifacts linked to error logs.
 
 paths:
   /v1/projects:
@@ -379,6 +381,86 @@ paths:
               example:
                 error: upstream_error
                 message: Sentry rejected the request. Check the auth token and project scope.
+  /v1/logs/errors/{logId}/repair-attempts:
+    get:
+      tags:
+        - Repair Attempts
+      operationId: listRepairAttemptsForErrorLog
+      summary: List repair attempts for an error log
+      description: >
+        Returns persisted repair attempts and their artifacts for a specific
+        error log owned by the authenticated project.
+      security:
+        - apiTokenAuth: []
+      parameters:
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Repair attempts linked to the requested error log
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RepairAttempt'
+        '401':
+          description: Missing or invalid API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Error log not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/logs/errors/{logId}/artifacts/{artifactId}:
+    get:
+      tags:
+        - Repair Attempts
+      operationId: getRepairArtifact
+      summary: Fetch a persisted repair artifact
+      description: >
+        Streams a persisted artifact file, such as a screenshot, report, or
+        patch, for a repair attempt linked to a specific error log.
+      security:
+        - apiTokenAuth: []
+      parameters:
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: artifactId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Artifact content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Missing or invalid API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Error log or artifact not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   securitySchemes:
@@ -775,6 +857,87 @@ components:
         receivedAt:
           type: string
           format: date-time
+
+    RepairArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - repairAttemptId
+        - kind
+        - fileName
+        - relativePath
+        - contentType
+        - byteSize
+        - createdAt
+        - url
+      properties:
+        id:
+          type: string
+        repairAttemptId:
+          type: string
+        kind:
+          type: string
+        fileName:
+          type: string
+        relativePath:
+          type: string
+        contentType:
+          type: string
+        byteSize:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        url:
+          type: string
+
+    RepairAttempt:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - errorLogId
+        - status
+        - prGate
+        - stage
+        - startedAt
+        - finishedAt
+        - createdAt
+        - artifacts
+      properties:
+        id:
+          type: string
+        errorLogId:
+          type: string
+        status:
+          type: string
+        prGate:
+          type: string
+          enum:
+            - allow
+            - block
+        stage:
+          type: string
+        selectedBackend:
+          type: string
+        profileId:
+          type: string
+        failureReason:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepairArtifact'
 
     ErrorResponse:
       type: object
