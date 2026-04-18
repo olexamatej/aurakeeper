@@ -26,7 +26,7 @@ function Section({
 }) {
   return (
     <div>
-      <h4 className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      <h4 className="mb-2 font-mono text-[11px] font-medium tracking-[0.18em] text-muted-foreground uppercase">
         {title}
       </h4>
       {children}
@@ -38,8 +38,8 @@ function KeyValue({ label, value }: { label: string; value?: string | boolean | 
   if (value === undefined || value === null) return null
   const display = typeof value === "boolean" ? (value ? "Yes" : "No") : value
   return (
-    <div className="flex gap-2 text-sm">
-      <span className="shrink-0 text-muted-foreground">{label}:</span>
+    <div className="flex gap-2 text-sm leading-relaxed">
+      <span className="shrink-0 font-mono text-[11px] tracking-wider text-muted-foreground uppercase">{label}:</span>
       <span className="break-all">{display}</span>
     </div>
   )
@@ -48,7 +48,7 @@ function KeyValue({ label, value }: { label: string; value?: string | boolean | 
 function JsonBlock({ data }: { data: unknown }) {
   if (!data) return null
   return (
-    <pre className="mt-1 max-h-60 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap break-all">
+    <pre className="mt-1 max-h-60 overflow-auto rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-xs whitespace-pre-wrap break-all">
       {JSON.stringify(data, null, 2)}
     </pre>
   )
@@ -153,20 +153,20 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
   })
 
   return (
-    <div className="space-y-4 px-4 pb-4 pt-2 overflow-hidden">
+    <div className="space-y-5 overflow-hidden px-4 pb-4 pt-3">
       <Section title="Repair">
         {canRepair ? (
           <div className="space-y-3">
-            <div className="rounded-md border p-3">
+            <div className="rounded-xl border border-white/10 bg-black/25 p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex-1">
-                  <p className="text-sm font-medium">
+                  <p className="font-heading text-base font-medium">
                     {project.repair?.autoTrigger ? "Auto-run is enabled" : "Manual fixes only"}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                     Target repo: {project.repair?.checkoutPath}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                     Verified patch apply: {project.repair?.promotionMode === "manual" ? "Manual" : "Auto"}
                   </p>
                 </div>
@@ -182,30 +182,30 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
                 value={issueSummary}
                 onChange={(e) => setIssueSummary(e.target.value)}
                 placeholder="Optional guidance for the repair agents"
-                className="mt-3 min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className="mt-3 min-h-24 w-full rounded-lg border border-white/10 bg-black/50 px-4 py-3 text-sm text-foreground placeholder:text-white/35 outline-none transition-all duration-200 focus:border-[#A855F7]/85 focus:shadow-[0_10px_20px_-10px_rgba(168,85,247,0.55)]"
               />
             </div>
 
-            <div className="rounded-md border p-3">
-              <p className="text-sm font-medium">Repair attempts</p>
+            <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+              <p className="font-heading text-base font-medium">Repair attempts</p>
               {attemptsLoading ? (
                 <p className="mt-2 text-sm text-muted-foreground">Loading repair attempts...</p>
               ) : attempts && attempts.length > 0 ? (
                 <div className="mt-3 space-y-3">
                   {attempts.map((attempt) => (
-                    <div key={attempt.id} className="rounded-md bg-muted/50 p-3 overflow-hidden">
+                    <div key={attempt.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] p-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant={attempt.prGate === "allow" ? "secondary" : "destructive"}>
                           {attempt.status}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                           {attempt.stage} • {formatTime(attempt.createdAt)}
                         </span>
                       </div>
                       {attempt.failureReason ? (
                         <p className="mt-2 text-sm text-muted-foreground break-all whitespace-pre-wrap">{attempt.failureReason}</p>
                       ) : null}
-                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      <div className="mt-2 space-y-1 font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                         <p>
                           Verified patch apply mode: {attempt.promotionMode === "manual" ? "Manual" : "Auto"}
                         </p>
@@ -252,7 +252,7 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
                                   fileName: artifact.fileName,
                                 })
                               }
-                              className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                              className="rounded-full border border-white/20 bg-transparent px-3 py-1 font-mono text-[11px] tracking-wide text-foreground uppercase transition-all duration-200 hover:border-[#A855F7]/80 hover:bg-[#A855F7]/20"
                             >
                               {artifact.kind}: {artifact.fileName}
                             </button>
@@ -268,14 +268,14 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
                 </p>
               )}
               {latestAttempt ? (
-                <p className="mt-3 text-xs text-muted-foreground">
+                <p className="mt-3 font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                   Latest attempt: {latestAttempt.status} at {formatTime(latestAttempt.finishedAt)}
                 </p>
               ) : null}
             </div>
           </div>
         ) : (
-          <div className="rounded-md border p-3 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-sm text-muted-foreground">
             This project does not have a repair checkout path configured, so the fix agents cannot run yet.
             Create a new project with a repair path to enable manual fixes and auto-run.
           </div>
@@ -292,13 +292,13 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
           <KeyValue label="Handled" value={log.error.handled} />
         </div>
         {log.error.stack && (
-          <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
+          <pre className="mt-2 max-h-48 overflow-auto rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">
             {log.error.stack}
           </pre>
         )}
         {log.error.details && (
           <>
-            <p className="mt-2 text-xs text-muted-foreground">Details</p>
+            <p className="mt-2 font-mono text-[11px] tracking-wide text-muted-foreground uppercase">Details</p>
             <JsonBlock data={log.error.details} />
           </>
         )}

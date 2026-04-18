@@ -36,19 +36,22 @@ const LEVEL_VARIANT: Record<ErrorLevel, "default" | "secondary" | "destructive" 
 }
 
 const STATE_LABELS: Partial<Record<ErrorLogState, { label: string; className: string }>> = {
-  new_error: { label: "New", className: "bg-red-100 text-red-800" },
-  repro_started: { label: "Repro", className: "bg-yellow-100 text-yellow-800" },
-  repro_succeeded: { label: "Reproduced", className: "bg-yellow-100 text-yellow-800" },
-  repro_failed: { label: "Repro failed", className: "bg-gray-100 text-gray-800" },
-  fix_started: { label: "Fixing", className: "bg-blue-100 text-blue-800" },
-  fix_succeeded: { label: "Fixed", className: "bg-green-100 text-green-800" },
-  fix_failed: { label: "Fix failed", className: "bg-red-100 text-red-800" },
-  verify_started: { label: "Verifying", className: "bg-blue-100 text-blue-800" },
-  verify_succeeded: { label: "Verified", className: "bg-green-100 text-green-800" },
-  verify_failed: { label: "Verify failed", className: "bg-red-100 text-red-800" },
-  deploy_started: { label: "Deploying", className: "bg-blue-100 text-blue-800" },
-  deploy_succeeded: { label: "Deployed", className: "bg-green-100 text-green-800" },
-  deploy_failed: { label: "Deploy failed", className: "bg-red-100 text-red-800" },
+  new_error: { label: "New", className: "border-red-500/60 bg-red-500/20 text-red-200" },
+  repro_started: { label: "Repro", className: "border-[#7C3AED]/80 bg-[#7C3AED]/32 text-[#EEE5FF]" },
+  repro_succeeded: {
+    label: "Reproduced",
+    className: "border-[#A855F7]/80 bg-[#A855F7]/30 text-[#F5E9FF]",
+  },
+  repro_failed: { label: "Repro failed", className: "border-white/20 bg-white/5 text-muted-foreground" },
+  fix_started: { label: "Fixing", className: "border-[#7C3AED]/80 bg-[#7C3AED]/32 text-[#EEE5FF]" },
+  fix_succeeded: { label: "Fixed", className: "border-[#C084FC]/80 bg-[#C084FC]/30 text-[#F5E9FF]" },
+  fix_failed: { label: "Fix failed", className: "border-red-500/60 bg-red-500/20 text-red-200" },
+  verify_started: { label: "Verifying", className: "border-[#7C3AED]/80 bg-[#7C3AED]/32 text-[#EEE5FF]" },
+  verify_succeeded: { label: "Verified", className: "border-[#C084FC]/80 bg-[#C084FC]/30 text-[#F5E9FF]" },
+  verify_failed: { label: "Verify failed", className: "border-red-500/60 bg-red-500/20 text-red-200" },
+  deploy_started: { label: "Deploying", className: "border-[#7C3AED]/80 bg-[#7C3AED]/32 text-[#EEE5FF]" },
+  deploy_succeeded: { label: "Deployed", className: "border-[#C084FC]/80 bg-[#C084FC]/30 text-[#F5E9FF]" },
+  deploy_failed: { label: "Deploy failed", className: "border-red-500/60 bg-red-500/20 text-red-200" },
 }
 
 function StateBadge({ state }: { state: ErrorLogState }) {
@@ -56,7 +59,7 @@ function StateBadge({ state }: { state: ErrorLogState }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[11px] font-medium tracking-wider uppercase",
         config.className,
       )}
     >
@@ -85,14 +88,14 @@ function LogRow({ log, project }: { log: ErrorLog; project: StoredProject }) {
   return (
     <>
       <TableRow
-        className="cursor-pointer hover:bg-muted/50"
+        className="group cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
         <TableCell className="w-8 px-2">
           {expanded ? (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <ChevronDown className="h-4 w-4 text-[#C084FC]" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-[#C084FC]" />
           )}
         </TableCell>
         <TableCell>
@@ -103,7 +106,7 @@ function LogRow({ log, project }: { log: ErrorLog; project: StoredProject }) {
         </TableCell>
         <TableCell className="truncate font-mono text-sm">
           {log.error.type && (
-            <span className="font-semibold">{log.error.type}: </span>
+            <span className="font-semibold text-[#E9D5FF]">{log.error.type}: </span>
           )}
           {log.error.message}
         </TableCell>
@@ -119,7 +122,7 @@ function LogRow({ log, project }: { log: ErrorLog; project: StoredProject }) {
       </TableRow>
       {expanded && (
         <TableRow>
-          <TableCell colSpan={7} className="bg-muted/30 p-0">
+          <TableCell colSpan={7} className="bg-black/35 p-0">
             <ErrorLogDetail log={log} project={project} />
           </TableCell>
         </TableRow>
@@ -140,10 +143,10 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-center justify-between border-b px-6 py-3">
+      <div className="flex items-center justify-between border-b border-white/10 bg-[#0F1115]/70 px-6 py-4 backdrop-blur-md">
         <div>
-          <h2 className="text-lg font-semibold">{project.name}</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="font-heading text-2xl font-semibold tracking-tight">{project.name}</h2>
+          <p className="font-mono text-xs tracking-wider text-muted-foreground uppercase">
             {data ? `${data.length} error log${data.length !== 1 ? "s" : ""}` : "Loading..."}
           </p>
           {project.repair?.checkoutPath ? (
@@ -159,6 +162,7 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
         <Button
           variant="outline"
           size="sm"
+          className="min-w-[128px]"
           onClick={() => refetch()}
           disabled={isFetching}
         >
@@ -179,9 +183,9 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
         </div>
       ) : isError ? (
         <div className="flex flex-1 items-center justify-center">
-          <div className="text-center">
+          <div className="glass-panel mx-6 rounded-2xl px-8 py-10 text-center">
             <AlertCircle className="mx-auto h-10 w-10 text-destructive" />
-            <p className="mt-3 font-medium">Failed to load error logs</p>
+            <p className="mt-3 font-heading text-xl font-medium">Failed to load error logs</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {error?.message ?? "Unknown error"}
             </p>
@@ -197,18 +201,18 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
         </div>
       ) : data && data.length === 0 ? (
         <div className="flex flex-1 items-center justify-center">
-          <div className="text-center">
-            <AlertCircle className="mx-auto h-10 w-10 text-muted-foreground/40" />
-            <p className="mt-3 font-medium text-muted-foreground">
+          <div className="glass-panel mx-6 rounded-2xl px-8 py-10 text-center">
+            <AlertCircle className="mx-auto h-10 w-10 text-[#A855F7]/95" />
+            <p className="mt-3 font-heading text-xl font-medium text-muted-foreground">
               No error logs yet
             </p>
-            <p className="mt-1 text-sm text-muted-foreground/70">
+            <p className="mt-1 text-sm text-muted-foreground">
               Errors will appear here once your connector starts sending them
             </p>
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
           <Table className="table-fixed w-full">
             <TableHeader>
               <TableRow>

@@ -55,14 +55,14 @@ export function ProjectList({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="p-3">
+      <div className="p-4">
         <CreateProjectDialog onCreated={handleCreated} />
       </div>
       <Separator />
       <ScrollArea className="flex-1">
-        <div className="p-2">
+        <div className="space-y-1.5 p-3">
           {projects.length === 0 ? (
-            <p className="px-2 py-8 text-center text-sm text-muted-foreground">
+            <p className="px-2 py-10 text-center font-mono text-xs tracking-widest text-muted-foreground uppercase">
               No projects yet
             </p>
           ) : (
@@ -71,22 +71,22 @@ export function ProjectList({
                 key={project.id}
                 onClick={() => onSelect(project)}
                 className={cn(
-                  "group flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors",
+                  "group relative flex w-full items-center gap-3 rounded-xl border px-3 py-3 text-left transition-all duration-300",
                   selectedId === project.id
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/50",
+                    ? "border-[#A855F7]/90 bg-[#A855F7]/26 text-sidebar-accent-foreground shadow-[0_0_24px_-12px_rgba(168,85,247,0.92)]"
+                    : "border-white/10 bg-white/[0.02] text-sidebar-foreground hover:-translate-y-0.5 hover:border-[#A855F7]/65 hover:bg-white/[0.04]",
                 )}
               >
-                <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <FolderOpen className="h-4 w-4 shrink-0 text-[#C084FC]" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate">{project.name}</div>
+                  <div className="truncate text-sm font-medium">{project.name}</div>
                   {project.repair?.checkoutPath ? (
-                    <div className="truncate text-xs text-muted-foreground">
+                    <div className="truncate font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                       {project.repair.autoTrigger ? "Auto-fix on" : "Manual fix only"}
                     </div>
                   ) : null}
                 </div>
-                <span className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="flex shrink-0 gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span onClick={(e) => e.stopPropagation()}>
@@ -100,7 +100,7 @@ export function ProjectList({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6"
+                        className="h-8 w-8 min-h-0 min-w-0 border border-[#A855F7]/35"
                         onClick={(e) => handleCopyToken(e, project)}
                       >
                         {copiedId === project.id ? (
@@ -117,7 +117,7 @@ export function ProjectList({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-destructive hover:text-destructive"
+                        className="h-8 w-8 min-h-0 min-w-0 border border-[#A855F7]/35 text-destructive hover:text-destructive"
                         onClick={(e) => handleRemove(e, project)}
                       >
                         <Trash2 className="h-3 w-3" />

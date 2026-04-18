@@ -120,11 +120,11 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
     <Dialog open={open} onOpenChange={resetForm}>
       <DialogTrigger asChild>
         {isEditing ? (
-          <Button variant="ghost" size="icon" className="h-6 w-6">
+          <Button variant="ghost" size="icon" className="h-8 w-8 min-h-0 min-w-0 border border-white/10">
             <Pencil className="h-3 w-3" />
           </Button>
         ) : (
-          <Button variant="ghost" size="sm" className="w-full justify-start gap-2">
+          <Button variant="outline" size="sm" className="w-full justify-start gap-2">
             <Plus className="h-4 w-4" />
             New Project
           </Button>
@@ -140,7 +140,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
                 : "A new API token will be generated for this project."}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="space-y-4 py-4">
             <Label htmlFor="project-name">Project name</Label>
             <Input
               id="project-name"
@@ -152,7 +152,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
               disabled={mutation.isPending}
             />
 
-            <div className="mt-4">
+            <div>
               <Label htmlFor="project-checkout-path">Repair checkout path</Label>
               <Input
                 id="project-checkout-path"
@@ -167,14 +167,14 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
               </p>
             </div>
 
-            <div className="mt-4">
+            <div>
               <Label htmlFor="project-promotion-mode">Verified patch apply mode</Label>
               <select
                 id="project-promotion-mode"
                 value={promotionMode}
                 onChange={(e) => setPromotionMode(e.target.value as "auto" | "manual")}
                 disabled={mutation.isPending || !checkoutPath.trim()}
-                className="mt-2 flex h-10 w-full rounded-md border bg-background px-3 text-sm"
+                className="mt-2 flex h-12 w-full rounded-lg border-0 border-b-2 border-white/20 bg-black/50 px-4 text-sm text-foreground outline-none transition-all duration-200 focus:border-[#A855F7] focus:shadow-[0_10px_20px_-10px_rgba(168,85,247,0.55)] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <option value="auto">Auto apply after verify</option>
                 <option value="manual">Manual apply after verify</option>
@@ -184,16 +184,16 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
               </p>
             </div>
 
-            <label className="mt-4 flex items-start gap-3 rounded-md border p-3">
+            <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/25 p-3">
               <input
                 type="checkbox"
                 checked={autoTrigger}
                 onChange={(e) => setAutoTrigger(e.target.checked)}
                 disabled={mutation.isPending || !checkoutPath.trim()}
-                className="mt-0.5 h-4 w-4"
+                className="mt-0.5 h-4 w-4 rounded border-white/30 bg-black/50 text-[#A855F7]"
               />
               <div>
-                <div className="text-sm font-medium">Auto-run fixes for new errors</div>
+                <div className="font-heading text-sm font-medium">Auto-run fixes for new errors</div>
                 <p className="text-xs text-muted-foreground">
                   When enabled, newly ingested errors will immediately queue the fix pipeline for this project.
                 </p>

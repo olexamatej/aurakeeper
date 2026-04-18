@@ -1,47 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: oklch(1 0 0);
-  --color-foreground: oklch(0.145 0 0);
-  --color-card: oklch(1 0 0);
-  --color-card-foreground: oklch(0.145 0 0);
-  --color-popover: oklch(1 0 0);
-  --color-popover-foreground: oklch(0.145 0 0);
-  --color-primary: oklch(0.205 0 0);
-  --color-primary-foreground: oklch(0.985 0 0);
-  --color-secondary: oklch(0.965 0 0);
-  --color-secondary-foreground: oklch(0.205 0 0);
-  --color-muted: oklch(0.965 0 0);
-  --color-muted-foreground: oklch(0.556 0 0);
-  --color-accent: oklch(0.965 0 0);
-  --color-accent-foreground: oklch(0.205 0 0);
-  --color-destructive: oklch(0.577 0.245 27.325);
-  --color-destructive-foreground: oklch(0.577 0.245 27.325);
-  --color-border: oklch(0.922 0 0);
-  --color-input: oklch(0.922 0 0);
-  --color-ring: oklch(0.708 0 0);
-  --color-chart-1: oklch(0.646 0.222 41.116);
-  --color-chart-2: oklch(0.6 0.118 184.704);
-  --color-chart-3: oklch(0.398 0.07 227.392);
-  --color-chart-4: oklch(0.828 0.189 84.429);
-  --color-chart-5: oklch(0.769 0.188 70.08);
-  --color-sidebar: oklch(0.985 0 0);
-  --color-sidebar-foreground: oklch(0.145 0 0);
-  --color-sidebar-primary: oklch(0.205 0 0);
-  --color-sidebar-primary-foreground: oklch(0.985 0 0);
-  --color-sidebar-accent: oklch(0.965 0 0);
-  --color-sidebar-accent-foreground: oklch(0.205 0 0);
-  --color-sidebar-border: oklch(0.922 0 0);
-  --color-sidebar-ring: oklch(0.708 0 0);
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.75rem;
+  --font-heading: "Space Grotesk", "Inter", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-mono:
+    "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-sans: var(--font-body);
+
+  --color-background: #030304;
+  --color-foreground: #ffffff;
+  --color-card: #0f1115;
+  --color-card-foreground: #ffffff;
+  --color-popover: #0f1115;
+  --color-popover-foreground: #ffffff;
+  --color-primary: #C084FC;
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #131922;
+  --color-secondary-foreground: #ffffff;
+  --color-muted: #0d1118;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #A855F7;
+  --color-accent-foreground: #ffffff;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+  --color-border: #1e293b;
+  --color-input: #1e293b;
+  --color-ring: #C084FC;
+  --color-chart-1: #7C3AED;
+  --color-chart-2: #A855F7;
+  --color-chart-3: #C084FC;
+  --color-chart-4: #ddd6fe;
+  --color-chart-5: #e879f9;
+  --color-sidebar: #090b0f;
+  --color-sidebar-foreground: #ffffff;
+  --color-sidebar-primary: #C084FC;
+  --color-sidebar-primary-foreground: #030304;
+  --color-sidebar-accent: #131722;
+  --color-sidebar-accent-foreground: #ffffff;
+  --color-sidebar-border: #1e293b;
+  --color-sidebar-ring: #C084FC;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
 }
 
 @layer base {
+  :root {
+    --radius: 1rem;
+    --bitcoin-orange: #A855F7;
+    --burnt-orange: #7C3AED;
+    --digital-gold: #C084FC;
+  }
+
   *,
   ::after,
   ::before,
@@ -49,8 +64,132 @@
   ::file-selector-button {
     border-color: var(--color-border);
   }
+
+  html,
+  body,
+  #root {
+    min-height: 100svh;
+  }
+
   body {
+    font-family: var(--font-body);
     background-color: var(--color-background);
     color: var(--color-foreground);
+    text-rendering: geometricPrecision;
+    background-image:
+      radial-gradient(circle at 15% 15%, rgb(168 85 247 / 0.24), transparent 38%),
+      radial-gradient(circle at 80% 0%, rgb(192 132 252 / 0.18), transparent 30%),
+      radial-gradient(circle at 50% 110%, rgb(124 58 237 / 0.22), transparent 54%);
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+    letter-spacing: -0.015em;
+  }
+
+  ::selection {
+    color: #ffffff;
+    background-color: rgb(168 85 247 / 0.5);
+  }
+}
+
+@layer utilities {
+  .font-heading {
+    font-family: var(--font-heading);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  .text-gradient-bitcoin {
+    background-image: linear-gradient(to right, #A855F7, #E879F9);
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .bg-grid-pattern {
+    background-size: 50px 50px;
+    background-image:
+      linear-gradient(to right, rgb(30 41 59 / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(30 41 59 / 0.5) 1px, transparent 1px);
+    mask-image: radial-gradient(circle at center, black 42%, transparent 100%);
+  }
+
+  .void-noise {
+    background-image: url("https://www.transparenttextures.com/patterns/cubes.png");
+    opacity: 0.05;
+  }
+
+  .glass-panel {
+    border: 1px solid rgb(192 132 252 / 0.34);
+    background: rgb(15 17 21 / 0.74);
+    backdrop-filter: blur(18px);
+  }
+
+  .glow-orange {
+    box-shadow: 0 0 24px -5px rgb(124 58 237 / 0.65);
+  }
+
+  .glow-gold {
+    box-shadow: 0 0 24px rgb(192 132 252 / 0.5);
+  }
+
+  .glow-soft {
+    box-shadow: 0 0 60px -10px rgb(168 85 247 / 0.32);
+  }
+
+  .animate-float {
+    animation: float 8s ease-in-out infinite;
+  }
+
+  .animate-orbit-reverse {
+    animation: spin 15s linear infinite reverse;
+  }
+
+  .animate-pulse-live {
+    animation: pulse-live 2.6s ease-in-out infinite;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes pulse-live {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(168 85 247 / 0.62);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgb(168 85 247 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-orbit-reverse,
+  .animate-pulse-live,
+  .animate-bounce,
+  .animate-spin,
+  [class*="duration-"] {
+    animation: none !important;
+    transition-duration: 0ms !important;
   }
 }
