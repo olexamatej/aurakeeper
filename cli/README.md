@@ -29,6 +29,7 @@ The command:
 
 - inspects the current directory for common project manifests
 - uses `@clack/prompts` for a small interactive TUI
+- can optionally collect the ingestion endpoint URL and API token up front
 - runs a Codex agent in the current repository
 - asks the agent to either apply a premade hook pattern or write a custom one
 - reports changed files and follow-up steps

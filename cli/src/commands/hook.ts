@@ -30,9 +30,25 @@ function buildPrompt(input: {
   cwd: string;
   projectName: string;
   hookPreference: HookPreference;
+  ingestionConfig: {
+    endpoint: string | null;
+    apiToken: string | null;
+  };
   inspection: Awaited<ReturnType<typeof inspectProject>>;
   playbook: string;
 }): string {
+  const ingestionLines =
+    input.ingestionConfig.endpoint || input.ingestionConfig.apiToken
+      ? [
+          "User-supplied ingestion setup:",
+          `- Endpoint: ${input.ingestionConfig.endpoint ?? "not provided"}`,
+          `- API token: ${input.ingestionConfig.apiToken ?? "not provided"}`,
+          "- Treat these as setup inputs only. Do not hardcode or commit secrets into tracked files.",
+          "- If local persistence is helpful, prefer ignored env files or leave a clear next step instead.",
+          "",
+        ]
+      : [];
+
   return [
     "You are the AuraKeeper hook installer agent.",
     "Work inside the target repository and make the smallest safe integration that adds AuraKeeper error capture to the current project.",
@@ -44,6 +60,7 @@ function buildPrompt(input: {
     "",
     `Hook preference: ${input.hookPreference}`,
     "",
+    ...ingestionLines,
     "Project inspection:",
     "```json",
     JSON.stringify(input.inspection, null, 2),
@@ -120,6 +137,51 @@ export async function runHookCommand(): Promise<void> {
     })
   );
 
+  const configureIngestion = assertNotCancelled(
+    await confirm({
+      message: "Provide ingestion endpoint settings now?",
+      initialValue: false,
+    })
+  );
+
+  let ingestionEndpoint: string | null = null;
+  let ingestionApiToken: string | null = null;
+
+  if (configureIngestion) {
+    ingestionEndpoint = assertNotCancelled(
+      await text({
+        message: "Ingestion endpoint URL",
+        placeholder: "https://api.example.com/v1/logs/errors",
+        validate(value) {
+          if (value.trim().length === 0) {
+            return "Endpoint URL is required when this step is enabled.";
+          }
+
+          try {
+            const url = new URL(value.trim());
+            return url.protocol === "http:" || url.protocol === "https:"
+              ? undefined
+              : "Endpoint URL must use http or https.";
+          } catch {
+            return "Enter a valid URL.";
+          }
+        },
+      })
+    ).trim();
+
+    ingestionApiToken = assertNotCancelled(
+      await text({
+        message: "Ingestion API token",
+        placeholder: "ak_...",
+        validate(value) {
+          return value.trim().length > 0
+            ? undefined
+            : "API token is required when this step is enabled.";
+        },
+      })
+    ).trim();
+  }
+
   const proceed = assertNotCancelled(
     await confirm({
       message: `Run the hook agent in ${resolve(cwd)}?`,
@@ -147,6 +209,10 @@ export async function runHookCommand(): Promise<void> {
         cwd,
         projectName: projectName.trim(),
         hookPreference,
+        ingestionConfig: {
+          endpoint: ingestionEndpoint,
+          apiToken: ingestionApiToken,
+        },
         inspection,
         playbook,
       }),
