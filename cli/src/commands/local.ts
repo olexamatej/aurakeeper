@@ -42,6 +42,100 @@ type LocalState = {
   port: number;
 };
 
+type IssueState =
+  | "new_error"
+  | "repro_started"
+  | "repro_succeeded"
+  | "repro_failed"
+  | "fix_started"
+  | "fix_succeeded"
+  | "fix_failed"
+  | "verify_started"
+  | "verify_succeeded"
+  | "verify_failed"
+  | "deploy_started"
+  | "deploy_succeeded"
+  | "deploy_failed";
+
+type ErrorLogSummary = {
+  id: string;
+  state: IssueState;
+  receivedAt: string;
+  level?: string;
+  platform?: string;
+  service?: {
+    name?: string;
+  };
+  error?: {
+    type?: string;
+    message?: string;
+  };
+};
+
+type RepairStatusResponse = {
+  running: boolean;
+  logId: string;
+  repairAttemptId?: string;
+  stage?:
+    | "backend_selection"
+    | "context"
+    | "replicator"
+    | "worker"
+    | "verification"
+    | "tester"
+    | "promotion"
+    | "complete";
+  state?: IssueState;
+  detail?: string;
+  selectedBackend?: "docker" | "local";
+  profileId?: string;
+};
+
+type TrackedRepairLog = {
+  lastState: IssueState;
+  completed: boolean;
+  lastProgressKey: string | null;
+};
+
+const TERMINAL_ISSUE_STATES = new Set<IssueState>([
+  "repro_failed",
+  "fix_failed",
+  "verify_succeeded",
+  "verify_failed",
+  "deploy_succeeded",
+  "deploy_failed",
+]);
+
+const ISSUE_STATE_LABELS: Record<IssueState, string> = {
+  new_error: "received",
+  repro_started: "reproducing",
+  repro_succeeded: "reproduced",
+  repro_failed: "reproduction failed",
+  fix_started: "patching",
+  fix_succeeded: "patch created",
+  fix_failed: "patch failed",
+  verify_started: "verifying",
+  verify_succeeded: "verified",
+  verify_failed: "verification failed",
+  deploy_started: "applying patch",
+  deploy_succeeded: "patch applied",
+  deploy_failed: "patch apply failed",
+};
+
+const REPAIR_STAGE_LABELS: Record<
+  NonNullable<RepairStatusResponse["stage"]>,
+  string
+> = {
+  backend_selection: "Selecting backend",
+  context: "Collecting context",
+  replicator: "Reproducing error",
+  worker: "Preparing fix",
+  verification: "Running verification",
+  tester: "Reviewing fix",
+  promotion: "Applying patch",
+  complete: "Repair complete",
+};
+
 function usage(): string {
   return [
     "Usage: aurakeeper local [--port <number>] [-- <dev command>...]",
@@ -353,6 +447,228 @@ function formatCommand(command: string[]): string {
   return command.map((part) => (/\s/.test(part) ? JSON.stringify(part) : part)).join(" ");
 }
 
+function abbreviate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function formatErrorSummary(log: ErrorLogSummary): string {
+  const serviceName = log.service?.name?.trim();
+  const errorType = log.error?.type?.trim();
+  const errorMessage = log.error?.message?.trim();
+  const platform = log.platform?.trim();
+  const parts = [
+    serviceName ? `service=${serviceName}` : null,
+    platform ? `platform=${platform}` : null,
+    log.level ? `level=${log.level}` : null,
+  ].filter(Boolean);
+  const head = errorType || errorMessage || "Unknown error";
+  const tail = errorType && errorMessage ? `: ${errorMessage}` : "";
+
+  return `${abbreviate(`${head}${tail}`, 140)}${parts.length > 0 ? ` (${parts.join(", ")})` : ""}`;
+}
+
+function formatRepairProgress(status: RepairStatusResponse): string {
+  const stageLabel = status.stage ? REPAIR_STAGE_LABELS[status.stage] : "Repair update";
+  const parts = [status.detail?.trim()].filter(
+    (value): value is string => Boolean(value && value.length > 0)
+  );
+
+  if (status.selectedBackend) {
+    parts.push(`backend=${status.selectedBackend}`);
+  }
+
+  if (status.profileId) {
+    parts.push(`profile=${status.profileId}`);
+  }
+
+  return parts.length > 0 ? `${stageLabel}: ${parts.join(" | ")}` : stageLabel;
+}
+
+function logLocalEvent(message: string): void {
+  console.log(`[AuraKeeper] ${message}`);
+}
+
+async function fetchProjectJson<T>(
+  path: string,
+  state: LocalState
+): Promise<T> {
+  const response = await fetch(
+    `http://127.0.0.1:${state.port}${path}`,
+    {
+      headers: {
+        "X-API-Token": state.apiToken,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `AuraKeeper local monitor request failed (${response.status} ${response.statusText}) for ${path}.`
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
+function emitInterceptedError(log: ErrorLogSummary): void {
+  logLocalEvent(`Error intercepted for ${log.id}: ${formatErrorSummary(log)}`);
+}
+
+function emitFinalRepairState(logId: string, state: IssueState): void {
+  logLocalEvent(`Repair ${ISSUE_STATE_LABELS[state]} for ${logId}.`);
+}
+
+function shouldTrackRepairProgress(log: TrackedRepairLog): boolean {
+  return !log.completed && log.lastState !== "new_error";
+}
+
+function createLocalMonitor(projectState: LocalState) {
+  const knownLogIds = new Set<string>();
+  const trackedLogs = new Map<string, TrackedRepairLog>();
+  let baselineReady = false;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pollInFlight = false;
+
+  const scheduleNextPoll = () => {
+    if (stopped) {
+      return;
+    }
+
+    timer = setTimeout(() => {
+      void poll();
+    }, 1_000);
+  };
+
+  const poll = async () => {
+    if (stopped || pollInFlight) {
+      return;
+    }
+
+    pollInFlight = true;
+
+    try {
+      const logs = await fetchProjectJson<ErrorLogSummary[]>("/v1/logs/errors", projectState);
+
+      for (const log of logs.slice().reverse()) {
+        const existing = trackedLogs.get(log.id);
+
+        if (!baselineReady) {
+          knownLogIds.add(log.id);
+
+          if (TERMINAL_ISSUE_STATES.has(log.state)) {
+            trackedLogs.set(log.id, {
+              lastState: log.state,
+              completed: true,
+              lastProgressKey: null,
+            });
+          } else {
+            trackedLogs.set(log.id, {
+              lastState: log.state,
+              completed: false,
+              lastProgressKey: null,
+            });
+          }
+
+          continue;
+        }
+
+        if (!knownLogIds.has(log.id)) {
+          knownLogIds.add(log.id);
+          trackedLogs.set(log.id, {
+            lastState: log.state,
+            completed: TERMINAL_ISSUE_STATES.has(log.state),
+            lastProgressKey: null,
+          });
+          emitInterceptedError(log);
+
+          if (TERMINAL_ISSUE_STATES.has(log.state)) {
+            emitFinalRepairState(log.id, log.state);
+          }
+
+          continue;
+        }
+
+        if (!existing) {
+          trackedLogs.set(log.id, {
+            lastState: log.state,
+            completed: TERMINAL_ISSUE_STATES.has(log.state),
+            lastProgressKey: null,
+          });
+          continue;
+        }
+
+        if (existing.lastState !== log.state) {
+          existing.lastState = log.state;
+
+          if (TERMINAL_ISSUE_STATES.has(log.state) && !existing.completed) {
+            existing.completed = true;
+            emitFinalRepairState(log.id, log.state);
+          }
+        }
+      }
+
+      baselineReady = true;
+
+      await Promise.all(
+        Array.from(trackedLogs.entries()).map(async ([logId, trackedLog]) => {
+          if (!shouldTrackRepairProgress(trackedLog)) {
+            return;
+          }
+
+          try {
+            const status = await fetchProjectJson<RepairStatusResponse>(
+              `/v1/logs/errors/${logId}/repair-status`,
+              projectState
+            );
+
+            if (!status.running) {
+              return;
+            }
+
+            const progressKey = [
+              status.stage ?? "",
+              status.detail ?? "",
+              status.selectedBackend ?? "",
+              status.profileId ?? "",
+            ].join("|");
+
+            if (progressKey !== trackedLog.lastProgressKey) {
+              trackedLog.lastProgressKey = progressKey;
+              logLocalEvent(`${formatRepairProgress(status)} (${logId})`);
+            }
+          } catch {
+            // Ignore transient monitor failures and retry on the next poll.
+          }
+        })
+      );
+    } catch {
+      // Ignore transient monitor failures and retry on the next poll.
+    } finally {
+      pollInFlight = false;
+      scheduleNextPoll();
+    }
+  };
+
+  return {
+    start() {
+      void poll();
+    },
+    stop() {
+      stopped = true;
+
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+  };
+}
+
 function spawnProcess(input: {
   command: string;
   args: string[];
@@ -582,6 +898,9 @@ export async function runLocalCommand(): Promise<void> {
     "Local setup"
   );
 
+  const localMonitor = createLocalMonitor(projectState);
+  localMonitor.start();
+
   let shuttingDown = false;
   let devProcess: ChildProcess | null = null;
 
@@ -599,6 +918,8 @@ export async function runLocalCommand(): Promise<void> {
     if (!backendProcess.killed) {
       backendProcess.kill(signal);
     }
+
+    localMonitor.stop();
   };
 
   process.once("SIGINT", () => shutdown("SIGINT"));
