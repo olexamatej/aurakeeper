@@ -1,11 +1,10 @@
 # AuraKeeper
 
-AuraKeeper watches production and local development errors, groups the ones that
-matter, reproduces them when it can, and opens a verified fix for a human to
-review.
+AuraKeeper ingests production and local development errors, preserves the
+runtime and repository context needed to investigate them, and is growing
+toward an evidence-first repair loop.
 
-The first useful version should not try to be a fully autonomous engineer. It
-should be a careful repair loop:
+The core loop is:
 
 1. Capture a structured error event.
 2. Group it with related failures.
@@ -13,33 +12,36 @@ should be a careful repair loop:
 4. Reproduce the failure in a sandbox.
 5. Generate the smallest plausible patch.
 6. Run tests or a replay.
-7. Open a pull request with evidence.
+7. Produce a repair report that a human can review.
 
 ## Current Surface
 
-The repository currently defines the ingestion contract in
-[openapi.yaml](./openapi.yaml).
+The repository root [openapi.yaml](./openapi.yaml) is the source of truth for
+the API contract, and the backend already implements the current surface:
 
-`POST /v1/logs/errors` accepts platform-agnostic error events from web,
-backend, mobile, worker, CLI, or local development runtimes. The payload already
-captures the right foundation: service metadata, source runtime, normalized
-error fields, stack traces, arbitrary details, request/user/session context, and
-tags.
+- `POST /v1/projects` to create a project and mint an ingestion token
+- `GET /v1/logs/errors` to list stored error logs for a project
+- `POST /v1/logs/errors` to ingest normalized error events
+- `POST /v1/sources/sentry` to attach a Sentry source to a project
+- `POST /v1/sources/sentry/:sourceId/poll` to import fresh Sentry events
+- `GET /v1/logs/errors/:logId/repair-attempts` to list persisted repair attempts
+- `GET /v1/logs/errors/:logId/artifacts/:artifactId` to fetch stored artifacts
 
-For teams already using Sentry, the backend can also store a project-scoped
-Sentry source and poll that project for fresh Sentry events, mapping each one
-into the same normalized `ErrorLogRequest` shape before persistence.
+The error event shape already covers service metadata, runtime information,
+normalized error fields, stack traces, arbitrary details, and request or user
+context. Repair attempts can already persist reports and copied artifacts for a
+given error log.
 
 ## Product Shape
 
-AuraKeeper should sit between error reporting and code repair.
+AuraKeeper sits between error reporting and code repair.
 
-Traditional monitoring tells a team that something broke. AuraKeeper should
-answer the next question: "What changed, why did it fail, and what is the safest
-patch we can try?"
+Traditional monitoring tells a team that something broke. AuraKeeper is meant
+to answer the next question: "What changed, why did it fail, and what is the
+safest patch we can try?"
 
-The system should produce repair attempts with clear evidence, not silently
-rewrite production:
+The system is designed to produce repair attempts with clear evidence, not
+silently rewrite production:
 
 - issue summary with frequency, affected users, and first/last seen times
 - suspected root cause based on stack trace, release, and code context
@@ -50,7 +52,7 @@ rewrite production:
 
 ## Agent Roles
 
-AuraKeeper should be built from focused agents with narrow responsibilities.
+AuraKeeper is built around focused agents with narrow responsibilities.
 
 The [Replicator Agent](./agents/replicator.md) receives an error event or
 grouped issue, tries to reproduce it, and writes a short handoff with the TLDR,
@@ -75,159 +77,23 @@ backend implementation lives in
 and uses an injectable agent client so different agent runtimes can be plugged in
 without changing the orchestration policy.
 
-## MVP
+## Implemented Today
 
-Build the MVP around one language and one repo workflow before expanding.
+The backend and verification code already cover a meaningful slice of the MVP:
 
-Recommended first target:
+- project-scoped token provisioning and validated error ingestion
+- SQLite persistence for projects, error logs, repair attempts, and artifacts
+- Sentry import into the normalized error log pipeline
+- repository-aware verification orchestration with Replicator, Worker, and Tester roles
+- backend selection between local and Docker execution
+- project config loading from `.aurakeeper.json`, `.aurakeeper.yml`, or `.aurakeeper.yaml`
+- browser automation handoff for frontend-facing reproduction and verification
+- durable artifact storage and retrieval for completed repair attempts
 
-- Next.js or Node.js application errors
-- GitHub repository integration
-- local sandbox checkout per repair attempt
-- test command configured per project
-- pull request output, never direct production mutation
-
-The MVP flow:
-
-1. Ingest errors through the OpenAPI endpoint.
-2. Persist raw events and normalized issue groups.
-3. Fingerprint events by service, environment, error type, message, stack frame,
-   and route or component.
-4. Create an issue when a group crosses a threshold.
-5. Fetch repository context for the failing service version.
-6. Ask the Replicator Agent to reproduce the failure and write a handoff.
-7. Ask the Worker Agent to produce a focused patch from that handoff.
-8. Run the configured verification command.
-9. Open a pull request that includes the error, hypothesis, patch, and test
-   output.
-
-## Implementation Plan
-
-### 1. Ingestion API
-
-Implement the existing OpenAPI contract as a small HTTP service.
-
-Core responsibilities:
-
-- authenticate bearer tokens
-- validate `ErrorLogRequest`
-- store immutable raw events
-- return `202 accepted` quickly
-- enqueue background normalization and grouping work
-
-Suggested tables:
-
-- `projects`: customer or workspace boundary
-- `services`: logical application names and repository mapping
-- `error_events`: immutable raw ingested payloads
-- `error_groups`: deduplicated issues with status and fingerprint
-- `repair_attempts`: generated patches, commands, logs, and outcomes
-
-### 2. Fingerprinting
-
-Start deterministic and boring. Fancy clustering can come later.
-
-A first fingerprint can combine:
-
-- `service.name`
-- `environment`
-- `error.type`
-- normalized `error.message`
-- top application stack frame
-- `context.request.path` or source component when present
-
-Store the fingerprint inputs so humans can understand why events were grouped.
-
-### 3. Context Enrichment
-
-Each accepted event should be enriched with:
-
-- deploy version or git SHA
-- source file and line from stack traces
-- recent deploy metadata
-- related commits
-- project repair configuration
-- reproduction hints from `error.details`
-
-For local development, the client can send current branch, dirty state summary,
-package manager, command being run, and failing test output.
-
-### 4. Replicator Agent
-
-The Replicator Agent should operate in an isolated checkout.
-
-Inputs:
-
-- grouped error summary
-- representative event payload
-- relevant source files
-- project instructions
-- allowed commands
-- reproduction or diagnostic commands
-
-Outputs:
-
-- reproduction status
-- TLDR
-- likely cause
-- commands run
-- relevant logs and stack frames
-- handoff file for the Worker Agent
-
-### 5. Worker Agent
-
-The Worker Agent should operate in an isolated checkout.
-
-Inputs:
-
-- Replicator Agent handoff file
-- TLDR, likely cause, reproduction steps, commands, and logs
-- relevant source files
-- project instructions
-- allowed commands
-- verification command
-
-Outputs:
-
-- patch
-- explanation
-- commands run
-- logs
-- confidence
-- failure reason when no safe patch is found
-
-Keep the agent constrained. It should prefer the smallest code change that
-addresses the observed failure and should never edit unrelated files as cleanup.
-
-### 6. Verification
-
-Every repair attempt needs evidence.
-
-Minimum checks:
-
-- apply patch cleanly
-- run project-specific test command
-- run formatter or linter when configured
-- replay the original request/event when a replay fixture exists
-
-If verification fails, keep the attempt for learning and show the failure in the
-issue. Do not hide failed attempts; they are useful debugging history.
-
-### 7. Human Review
-
-For production, the default output should be a pull request.
-
-The PR should include:
-
-- error group link
-- affected service and version
-- reproduction notes
-- proposed root cause
-- validation output
-- rollback considerations
-
-Direct auto-merge can be a later opt-in feature for low-risk classes of changes
-with strong tests.
+The current implementation is strongest around evidence collection and
+verification. It already supports isolated workspaces, patch application,
+verification commands, and persisted repair reports, but it does not yet close
+the loop by creating pull requests or managing grouped issues end to end.
 
 ## Client SDKs
 
@@ -303,20 +169,16 @@ Avoid building the hardest version first.
 
 ## Near-Term Backlog
 
-- Implement `POST /v1/logs/errors`.
-- Add storage for events, groups, and repair attempts.
-- Add deterministic fingerprinting.
-- Add a TypeScript SDK.
-- Add a project config file for repository URL, install command, test command,
-  and allowed repair paths.
-- Add a repair worker that can create a patch in a sandbox checkout.
-- Add GitHub pull request creation.
-- Add a simple web UI for groups, attempts, and verification logs.
+- Add deterministic fingerprinting and first-class issue grouping.
+- Enrich stored events with deploy and repository metadata.
+- Create pull requests from successful repair attempts.
+- Replace the placeholder frontend with a real UI for logs, attempts, and artifacts.
+- Add more end-to-end wiring between ingestion, issue state, and repair orchestration.
 
 ## Open Questions
 
-- Which runtime should be supported first: Next.js, Python, or something else?
-- Should AuraKeeper run as hosted SaaS, self-hosted infrastructure, or both?
-- What source control provider is required first?
-- What level of production autonomy is acceptable for the first customers?
-- What data retention and redaction guarantees are required?
+- Should issue grouping stay deterministic and explicit, or should the project add
+  a learned clustering layer later?
+- Which source control provider should be supported first for PR creation?
+- What level of automation is acceptable before a human review step becomes optional?
+- What data retention and redaction guarantees are required for hosted deployments?
