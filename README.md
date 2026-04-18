@@ -242,6 +242,27 @@ Initial SDKs:
 - JVM in [`connectors/jvm`](./connectors/jvm)
 - .NET in [`connectors/dotnet`](./connectors/dotnet)
 - Ruby in [`connectors/ruby`](./connectors/ruby)
+
+## Connector Examples
+
+Each connector has a small runtime-error example under its `examples/` directory.
+Create or select a project in the web UI, then use the Connector examples panel
+to launch a whitelisted local demo against that project.
+
+The same demos can be run from the repository root:
+
+```bash
+AURAKEEPER_API_TOKEN=<project-token> make run python
+```
+
+List available examples with:
+
+```bash
+make list
+```
+
+Examples default to `http://127.0.0.1:3000/v1/logs/errors`. Override that with
+`AURAKEEPER_ENDPOINT` when the backend runs elsewhere.
 - PHP in [`connectors/php`](./connectors/php)
 
 SDK responsibilities:

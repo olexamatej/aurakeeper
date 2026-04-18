@@ -83,3 +83,16 @@ Poll the configured Sentry source and import any new events into `error_logs`:
 curl -X POST http://localhost:3000/v1/sources/sentry/<source-id>/poll \
   -H 'X-API-Token: <project-token>'
 ```
+
+## Local Connector Examples
+
+The backend exposes admin-protected development endpoints for launching
+whitelisted connector examples from the web UI:
+
+- `GET /v1/examples`
+- `POST /v1/examples/:exampleId/runs`
+- `GET /v1/examples/runs/:runId`
+
+These endpoints execute local commands from the repository's
+`examples/registry.json`, so they are intended for local development only and
+require `X-Admin-Token`.

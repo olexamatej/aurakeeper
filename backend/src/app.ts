@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 
 import { config } from "./config";
 import { db } from "./db";
+import { getExampleRun, listExamples, startExampleRun } from "./examples";
 import { errorLogs, projects } from "./schema";
 import { openapi } from "@elysiajs/openapi";
 import { insertErrorLog, serializeErrorLog } from "./error-logs";
@@ -54,6 +55,51 @@ function requireProjectByApiToken(apiToken: string | null) {
   return project;
 }
 
+function requireAdminToken(adminToken: string | null) {
+  if (!adminToken || adminToken !== config.adminToken) {
+    throw new ApiError(
+      401,
+      "unauthorized",
+      "Admin token is missing or invalid",
+    );
+  }
+}
+
+function parseExampleRunRequest(value: unknown): {
+  apiToken: string;
+  endpoint?: string;
+} {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new ApiError(400, "invalid_request", "body must be an object");
+  }
+
+  const body = value as Record<string, unknown>;
+  const unknownKey = Object.keys(body).find(
+    (key) => key !== "apiToken" && key !== "endpoint",
+  );
+
+  if (unknownKey) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `body contains unsupported field: ${unknownKey}`,
+    );
+  }
+
+  if (typeof body.apiToken !== "string" || body.apiToken.length === 0) {
+    throw new ApiError(400, "invalid_request", "apiToken must be a non-empty string");
+  }
+
+  if (body.endpoint !== undefined && typeof body.endpoint !== "string") {
+    throw new ApiError(400, "invalid_request", "endpoint must be a string");
+  }
+
+  return {
+    apiToken: body.apiToken,
+    endpoint: body.endpoint,
+  };
+}
+
 export const app = new Elysia()
   .onError(({ code, error, set }) => {
     if (code === "NOT_FOUND") {
@@ -91,15 +137,7 @@ export const app = new Elysia()
     status: "ok",
   }))
   .post("/v1/projects", async ({ request, set }) => {
-    const adminToken = request.headers.get("x-admin-token");
-
-    if (!adminToken || adminToken !== config.adminToken) {
-      throw new ApiError(
-        401,
-        "unauthorized",
-        "Admin token is missing or invalid",
-      );
-    }
+    requireAdminToken(request.headers.get("x-admin-token"));
 
     const payload = parseCreateProjectRequest(await parseJsonBody(request));
     const createdAt = new Date().toISOString();
@@ -123,6 +161,38 @@ export const app = new Elysia()
       token,
       createdAt,
     };
+  })
+  .get("/v1/examples", async ({ request }) => {
+    requireAdminToken(request.headers.get("x-admin-token"));
+
+    return listExamples();
+  })
+  .post("/v1/examples/:exampleId/runs", async ({ params, request, set }) => {
+    requireAdminToken(request.headers.get("x-admin-token"));
+
+    const payload = parseExampleRunRequest(await parseJsonBody(request));
+    const run = await startExampleRun({
+      exampleId: params.exampleId,
+      apiToken: payload.apiToken,
+      endpoint: payload.endpoint,
+    }).catch((error) => {
+      throw new ApiError(404, "not_found", (error as Error).message);
+    });
+
+    set.status = 202;
+
+    return run;
+  })
+  .get("/v1/examples/runs/:runId", ({ params, request }) => {
+    requireAdminToken(request.headers.get("x-admin-token"));
+
+    const run = getExampleRun(params.runId);
+
+    if (!run) {
+      throw new ApiError(404, "not_found", "Example run not found");
+    }
+
+    return run;
   })
   .get("/v1/logs/errors", ({ request }) => {
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));

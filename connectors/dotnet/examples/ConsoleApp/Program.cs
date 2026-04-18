@@ -1,15 +1,15 @@
 using AuraKeeper;
 
 var endpoint = Environment.GetEnvironmentVariable("AURAKEEPER_ENDPOINT")
-    ?? "https://api.example.com/v1/logs/errors";
+    ?? "http://127.0.0.1:3000/v1/logs/errors";
 var apiToken = Environment.GetEnvironmentVariable("AURAKEEPER_API_TOKEN")
-    ?? "replace-me";
+    ?? throw new InvalidOperationException("Set AURAKEEPER_API_TOKEN before running this example");
 
 await using var connector = new AuraKeeperConnector(new AuraKeeperConnectorOptions
 {
     Endpoint = new Uri(endpoint),
     ApiToken = apiToken,
-    ServiceName = "dotnet-console-example",
+    ServiceName = "dotnet-runtime-example",
     ServiceVersion = "2026.04.18",
     Environment = "development",
     Framework = "dotnet",
@@ -18,30 +18,4 @@ await using var connector = new AuraKeeperConnector(new AuraKeeperConnectorOptio
 });
 
 connector.Install();
-
-try
-{
-    throw new InvalidOperationException("Handled example error");
-}
-catch (Exception error)
-{
-    var result = await connector.CaptureExceptionAsync(
-        error,
-        new AuraKeeperCaptureOptions
-        {
-            Handled = true,
-            Level = "error",
-            Request = new Dictionary<string, object?>
-            {
-                ["path"] = "ConsoleApp.Main"
-            },
-            Details = new Dictionary<string, object?>
-            {
-                ["example"] = true
-            }
-        });
-
-    Console.WriteLine($"AuraKeeper response: {(int?)result?.StatusCode} {result?.Body}");
-}
-
-await connector.FlushAsync();
+throw new InvalidOperationException("Uncaught .NET runtime example");

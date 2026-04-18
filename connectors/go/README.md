@@ -14,7 +14,7 @@ endpoint.
 ## Files
 
 - [`aurakeeper.go`](./aurakeeper.go): connector implementation
-- [`examples/http`](./examples/http): small HTTP server example
+- [`examples/`](./examples): runnable setup examples
 
 ## Install
 
@@ -74,7 +74,7 @@ context, and return `500 Internal Server Error`.
 
 ## Example
 
-Run the example server:
+Run the example server from the connector directory:
 
 ```bash
 cd connectors/go
@@ -82,6 +82,9 @@ AURAKEEPER_ENDPOINT=http://localhost:8787/v1/logs/errors \
 AURAKEEPER_API_TOKEN=your-token \
 go run ./examples/http
 ```
+
+See [`examples/README.md`](./examples/README.md) for the example setup and
+runtime notes.
 
 Then visit:
 

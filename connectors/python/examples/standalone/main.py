@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import os
-from pprint import pprint
+import threading
 
 from aurakeeper import create_aurakeeper_connector
 
 
 def main() -> None:
-    endpoint = os.getenv("AURAKEEPER_ENDPOINT")
+    endpoint = os.getenv(
+        "AURAKEEPER_ENDPOINT", "http://127.0.0.1:3000/v1/logs/errors"
+    )
     api_token = os.getenv("AURAKEEPER_API_TOKEN")
 
     if not endpoint or not api_token:
         raise SystemExit(
-            "Set AURAKEEPER_ENDPOINT and AURAKEEPER_API_TOKEN before running this example."
+            "Set AURAKEEPER_API_TOKEN before running this example."
         )
 
     connector = create_aurakeeper_connector(
@@ -33,35 +35,12 @@ def main() -> None:
 
     connector.install()
 
-    try:
-        raise ValueError("Handled Python example error")
-    except ValueError as error:
-        handled_future = connector.capture_exception(
-            error,
-            handled=True,
-            level="error",
-            correlation_id="job_reconcile_payments_123",
-            request={
-                "method": "JOB",
-                "path": "reconcile-payments",
-            },
-            user={
-                "id": "system",
-            },
-            details={
-                "jobName": "reconcile-payments",
-                "attempt": 1,
-            },
-        )
-        pprint(handled_future.result())
+    def crash_worker() -> None:
+        raise RuntimeError("Uncaught Python example error")
 
-    message_future = connector.capture_message(
-        "Manual message capture from the standalone example",
-        level="warning",
-        handled=True,
-        details={"category": "example"},
-    )
-    pprint(message_future.result())
+    worker = threading.Thread(target=crash_worker, name="aurakeeper-example")
+    worker.start()
+    worker.join()
 
     connector.flush()
     print("Connector flush completed.")

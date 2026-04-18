@@ -17,6 +17,8 @@ servers:
 tags:
   - name: Projects
     description: Create projects and issue ingestion tokens.
+  - name: Examples
+    description: Run local connector examples in development.
   - name: Error Logs
     description: Submit structured error events.
   - name: Source Integrations
@@ -72,6 +74,113 @@ paths:
               example:
                 error: unauthorized
                 message: Admin token is missing or invalid
+  /v1/examples:
+    get:
+      tags:
+        - Examples
+      operationId: listExamples
+      summary: List local connector examples
+      description: >
+        Returns whitelisted connector examples that can be launched by the local
+        development backend. This endpoint is intended for local development.
+      security:
+        - adminTokenAuth: []
+      responses:
+        '200':
+          description: Connector examples
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExampleDefinition'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/examples/{exampleId}/runs:
+    post:
+      tags:
+        - Examples
+      operationId: startExampleRun
+      summary: Start a local connector example
+      description: >
+        Starts a whitelisted local connector example process and injects the
+        selected project API token into the example environment.
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - name: exampleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartExampleRunRequest'
+      responses:
+        '202':
+          description: Example run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleRun'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Unknown example
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/examples/runs/{runId}:
+    get:
+      tags:
+        - Examples
+      operationId: getExampleRun
+      summary: Get local connector example run status
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Example run status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExampleRun'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Unknown run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/logs/errors:
     get:
       tags:
@@ -560,6 +669,89 @@ components:
         lastPolledAt:
           type: string
           format: date-time
+
+    ExampleDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - description
+      properties:
+        id:
+          type: string
+          description: Stable example identifier used by the runner.
+        name:
+          type: string
+          description: Human-readable stack name.
+        description:
+          type: string
+          description: Short description of the runtime error demo.
+        manual:
+          type: string
+          description: Optional manual action needed after the process starts.
+
+    StartExampleRunRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - apiToken
+      properties:
+        apiToken:
+          type: string
+          description: Project API token injected into the example process.
+        endpoint:
+          type: string
+          description: Optional ingestion endpoint override.
+
+    ExampleRunStatus:
+      type: string
+      enum:
+        - running
+        - completed
+        - failed
+
+    ExampleRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - exampleId
+        - status
+        - startedAt
+        - stdout
+        - stderr
+      properties:
+        id:
+          type: string
+        exampleId:
+          type: string
+        status:
+          $ref: '#/components/schemas/ExampleRunStatus'
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        exitCode:
+          type:
+            - integer
+            - 'null'
+        signal:
+          type:
+            - string
+            - 'null'
+        triggerStatus:
+          type: integer
+        stdout:
+          type: string
+        stderr:
+          type: string
+        error:
+          type: string
+        manual:
+          type: string
 
     ErrorLogState:
       type: string

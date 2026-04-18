@@ -1,13 +1,20 @@
 require "aurakeeper"
 
+api_token = ENV["AURAKEEPER_API_TOKEN"]
+
+unless api_token
+  warn "Set AURAKEEPER_API_TOKEN before running this example."
+  exit 1
+end
+
 connector = AuraKeeper.create_aurakeeper_connector(
-  endpoint: ENV.fetch("AURAKEEPER_ENDPOINT", "https://api.example.com/v1/logs/errors"),
-  api_token: ENV.fetch("AURAKEEPER_API_TOKEN", "replace-me"),
+  endpoint: ENV.fetch("AURAKEEPER_ENDPOINT", "http://127.0.0.1:3000/v1/logs/errors"),
+  api_token: api_token,
   service_name: "ruby-standalone",
   service_version: "0.1.0",
   environment: ENV.fetch("RACK_ENV", "development"),
   framework: "stdlib",
-  component: "example",
+  component: "uncaught-example",
   tags: ["backend", "ruby"],
   context: {
     device: {
@@ -18,24 +25,4 @@ connector = AuraKeeper.create_aurakeeper_connector(
 
 connector.install
 
-begin
-  raise ArgumentError, "Handled example failure"
-rescue => error
-  response = connector.capture_exception(
-    error,
-    handled: true,
-    level: "error",
-    correlation_id: "example-job-123",
-    request: {
-      method: "RUN",
-      path: "/examples/standalone"
-    },
-    details: {
-      example: true
-    }
-  )
-
-  p(response)
-end
-
-connector.close
+raise ArgumentError, "Uncaught Ruby example failure"
