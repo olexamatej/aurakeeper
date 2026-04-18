@@ -14,6 +14,7 @@ bun run dev
 The server reads these environment variables:
 
 - `ADMIN_TOKEN` - expected value for the `X-Admin-Token` header on `POST /v1/projects`. Defaults to `bahno`.
+- `CORS_ALLOWED_ORIGINS` - comma-separated list of browser origins allowed to call the API. Defaults to `http://localhost:5173`.
 - `DATABASE_PATH` - SQLite database location. Defaults to `data/aurakeeper.sqlite`.
 - `ARTIFACTS_PATH` - persistent directory for copied repair artifacts. Defaults to `data/artifacts`.
 - `PORT` - bind port. Defaults to `3000`.

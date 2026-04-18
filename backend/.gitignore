@@ -38,5 +38,6 @@ yarn-error.log*
 **/*.tar.gz
 **/*.tgz
 **/*.log
+data/*.sqlite
 package-lock.json
 **/*.bun
