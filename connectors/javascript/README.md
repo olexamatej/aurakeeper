@@ -14,6 +14,7 @@ Generic JavaScript connector for sending application errors to AuraKeeper's
 ## Files
 
 - [`aurakeeper.js`](./aurakeeper.js): standalone connector module
+- [`examples/`](./examples): browser and Node.js setup examples
 
 ## Browser
 
@@ -113,3 +114,5 @@ runJob().finally(() => connector.flush());
   `fetch` explicitly or provide a custom `transport`.
 - Automatic runtime hooks are fire-and-forget. Use `flush()` before shutdown if
   you need to wait for in-flight sends to complete.
+- Full setup examples are available in [`examples/browser`](./examples/browser)
+  and [`examples/node`](./examples/node).
