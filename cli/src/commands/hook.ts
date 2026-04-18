@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import {
   cancel,
   confirm,
@@ -17,6 +17,83 @@ import { inspectProject } from "../lib/project.js";
 
 type HookPreference = "auto" | "template" | "project_specific";
 type HookProvider = "aurakeeper" | "sentry";
+const NOTE_WRAP_WIDTH = 88;
+
+function splitLongToken(token: string, width: number): string[] {
+  if (token.length <= width) {
+    return [token];
+  }
+
+  const parts: string[] = [];
+  let remaining = token;
+
+  while (remaining.length > width) {
+    const slice = remaining.slice(0, width);
+    const breakIndex = Math.max(
+      slice.lastIndexOf("/"),
+      slice.lastIndexOf("\\"),
+      slice.lastIndexOf("-"),
+      slice.lastIndexOf("_"),
+      slice.lastIndexOf("."),
+      slice.lastIndexOf(",")
+    );
+
+    const index = breakIndex > Math.floor(width / 3) ? breakIndex + 1 : width;
+    parts.push(remaining.slice(0, index));
+    remaining = remaining.slice(index);
+  }
+
+  if (remaining.length > 0) {
+    parts.push(remaining);
+  }
+
+  return parts;
+}
+
+function wrapLine(line: string, width = NOTE_WRAP_WIDTH): string[] {
+  if (line.length === 0) {
+    return [""];
+  }
+
+  const indent = line.match(/^\s*/)?.[0] ?? "";
+  const content = line.slice(indent.length).trim();
+  const contentWidth = Math.max(12, width - indent.length);
+
+  if (content.length === 0) {
+    return [indent];
+  }
+
+  const tokens = content
+    .split(/\s+/)
+    .flatMap((token) => splitLongToken(token, contentWidth));
+  const lines: string[] = [];
+  let current = "";
+
+  for (const token of tokens) {
+    const candidate = current.length === 0 ? token : `${current} ${token}`;
+    if (candidate.length <= contentWidth) {
+      current = candidate;
+      continue;
+    }
+
+    if (current.length > 0) {
+      lines.push(`${indent}${current}`);
+    }
+    current = token;
+  }
+
+  if (current.length > 0) {
+    lines.push(`${indent}${current}`);
+  }
+
+  return lines;
+}
+
+function formatNoteBlock(lines: string[]): string {
+  return lines
+    .flatMap((line) => wrapLine(line))
+    .join("\n");
+}
 
 function usage(): string {
   return [
@@ -148,7 +225,7 @@ export async function runHookCommand(): Promise<void> {
   const cwd = process.cwd();
   const inspection = await inspectProject(cwd);
 
-  const detectionLines = [
+  const detectionLines = formatNoteBlock([
     `Project: ${inspection.projectName}`,
     `Directory: ${inspection.cwd}`,
     `Package manager: ${inspection.packageManager ?? "unknown"}`,
@@ -160,7 +237,7 @@ export async function runHookCommand(): Promise<void> {
             .join(", ")
         : "unknown"
     }`,
-  ].join("\n");
+  ]);
 
   note(detectionLines, "Inspection");
 
@@ -307,18 +384,26 @@ export async function runHookCommand(): Promise<void> {
 
     installSpinner.stop("Hook agent completed");
 
+    const changedFiles =
+      result.filesChanged.length > 0
+        ? [
+            "Changed files:",
+            ...result.filesChanged.map((filePath) => `- ${relative(cwd, filePath) || filePath}`),
+          ]
+        : ["Changed files: none reported"];
+
     note(
-      [
+      formatNoteBlock([
         result.summary ?? "No summary returned.",
         `Strategy: ${result.strategy ?? "unknown"}`,
         `Detected stack: ${result.detectedStack ?? "unknown"}`,
-        `Changed files: ${result.filesChanged.length > 0 ? result.filesChanged.join(", ") : "none reported"}`,
-      ].join("\n"),
+        ...changedFiles,
+      ]),
       "Result"
     );
 
     if (result.nextSteps.length > 0) {
-      note(result.nextSteps.join("\n"), "Next steps");
+      note(formatNoteBlock(result.nextSteps.map((step) => `- ${step}`)), "Next steps");
     }
 
     outro("AuraKeeper hook installed.");
