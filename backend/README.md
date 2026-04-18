@@ -17,6 +17,10 @@ The server reads these environment variables:
 - `CORS_ALLOWED_ORIGINS` - comma-separated list of browser origins allowed to call the API. Defaults to `http://localhost:5173`.
 - `DATABASE_PATH` - SQLite database location. Defaults to `data/aurakeeper.sqlite`.
 - `ARTIFACTS_PATH` - persistent directory for copied repair artifacts. Defaults to `data/artifacts`.
+- `CODEX_PATH` - path to the `codex` executable used by the repair agent client. Defaults to `codex`.
+- `CODEX_MODEL` - optional model override passed to `codex exec`.
+- `CODEX_PROFILE` - optional Codex profile name passed to `codex exec`.
+- `CODEX_SANDBOX` - Codex sandbox mode for agent runs. Defaults to `workspace-write`.
 - `PORT` - bind port. Defaults to `3000`.
 
 Project-specific verification settings can also live in `.aurakeeper.json`,
@@ -50,6 +54,12 @@ in SQLite, and exposes them through:
 - `GET /v1/logs/errors/:logId/repair-attempts`
 - `GET /v1/logs/errors/:logId/artifacts/:artifactId`
 
+The verification module also includes a `CodexCliAgentClient` in
+`src/verification/codex-agent.ts`. It runs each orchestrator role through
+`codex exec`, passes the role prompt plus serialized task payload on stdin, and
+requires the final answer to match a JSON schema so the orchestrator can parse
+structured agent output safely.
+
 ## Example Requests
 
 Create a project and receive its ingestion token:
@@ -59,7 +69,31 @@ curl -X POST http://localhost:3000/v1/projects \
   -H 'Content-Type: application/json' \
   -H 'X-Admin-Token: bahno' \
   -d '{
-    "name": "aura-web"
+    "name": "aura-web",
+    "repair": {
+      "checkoutPath": "/absolute/path/to/aura-web",
+      "backend": "local",
+      "environment": "local",
+      "trustLevel": "trusted",
+      "autoTrigger": true
+    }
+  }'
+```
+
+Update an existing project's repair behavior:
+
+```bash
+curl -X PATCH http://localhost:3000/v1/projects/<project-id> \
+  -H 'Content-Type: application/json' \
+  -H 'X-Admin-Token: bahno' \
+  -d '{
+    "repair": {
+      "checkoutPath": "/absolute/path/to/aura-web",
+      "backend": "local",
+      "environment": "local",
+      "trustLevel": "trusted",
+      "autoTrigger": false
+    }
   }'
 ```
 
@@ -87,6 +121,20 @@ curl http://localhost:3000/v1/logs/errors \
 ```
 
 Accepted error logs are created with the default workflow state `new_error`.
+If the project has `repair.autoTrigger: true` and a configured checkout path,
+the backend immediately queues the Codex-backed repair pipeline for the new log
+and advances the log state into the repair workflow.
+
+Manually trigger a repair attempt for a previously stored log:
+
+```bash
+curl -X POST http://localhost:3000/v1/logs/errors/<log-id>/repair-attempts \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Token: <project-token>' \
+  -d '{
+    "issueSummary": "Focus on the stale dashboard value regression"
+  }'
+```
 
 Connect a project-scoped Sentry source:
 

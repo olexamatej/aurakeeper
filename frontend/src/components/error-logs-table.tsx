@@ -9,7 +9,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Table,
   TableBody,
@@ -80,7 +79,7 @@ function formatTime(iso: string): string {
   }
 }
 
-function LogRow({ log }: { log: ErrorLog }) {
+function LogRow({ log, project }: { log: ErrorLog; project: StoredProject }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -102,26 +101,26 @@ function LogRow({ log }: { log: ErrorLog }) {
         <TableCell>
           <Badge variant={LEVEL_VARIANT[log.level]}>{log.level}</Badge>
         </TableCell>
-        <TableCell className="max-w-xs truncate font-mono text-sm">
+        <TableCell className="truncate font-mono text-sm">
           {log.error.type && (
             <span className="font-semibold">{log.error.type}: </span>
           )}
           {log.error.message}
         </TableCell>
-        <TableCell className="text-muted-foreground">
+        <TableCell className="truncate text-muted-foreground">
           {log.source.framework ?? log.source.runtime}
         </TableCell>
-        <TableCell className="text-muted-foreground">
+        <TableCell className="truncate text-muted-foreground">
           {log.environment ?? "-"}
         </TableCell>
-        <TableCell className="whitespace-nowrap text-muted-foreground">
+        <TableCell className="truncate text-muted-foreground">
           {formatTime(log.occurredAt)}
         </TableCell>
       </TableRow>
       {expanded && (
         <TableRow>
           <TableCell colSpan={7} className="bg-muted/30 p-0">
-            <ErrorLogDetail log={log} />
+            <ErrorLogDetail log={log} project={project} />
           </TableCell>
         </TableRow>
       )}
@@ -147,6 +146,15 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
           <p className="text-sm text-muted-foreground">
             {data ? `${data.length} error log${data.length !== 1 ? "s" : ""}` : "Loading..."}
           </p>
+          {project.repair?.checkoutPath ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {project.repair.autoTrigger ? "Auto-fix enabled" : "Manual fix mode"} at {project.repair.checkoutPath}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              No repair target configured for this project yet.
+            </p>
+          )}
         </div>
         <Button
           variant="outline"
@@ -200,24 +208,24 @@ export function ErrorLogsTable({ project }: ErrorLogsTableProps) {
           </div>
         </div>
       ) : (
-        <ScrollArea className="flex-1">
-          <Table>
+        <div className="flex-1 overflow-y-auto">
+          <Table className="table-fixed w-full">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
-                <TableHead className="w-28">State</TableHead>
-                <TableHead className="w-24">Level</TableHead>
+                <TableHead className="w-24">State</TableHead>
+                <TableHead className="w-20">Level</TableHead>
                 <TableHead>Error</TableHead>
-                <TableHead className="w-28">Source</TableHead>
-                <TableHead className="w-28">Env</TableHead>
-                <TableHead className="w-40">Time</TableHead>
+                <TableHead className="w-24">Source</TableHead>
+                <TableHead className="w-20">Env</TableHead>
+                <TableHead className="w-36">Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data?.map((log) => <LogRow key={log.id} log={log} />)}
+              {data?.map((log) => <LogRow key={log.id} log={log} project={project} />)}
             </TableBody>
           </Table>
-        </ScrollArea>
+        </div>
       )}
     </div>
   )

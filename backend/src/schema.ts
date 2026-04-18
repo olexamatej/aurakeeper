@@ -6,6 +6,15 @@ export const projects = sqliteTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     token: text("token").notNull(),
+    repairCheckoutPath: text("repair_checkout_path"),
+    repairRepositoryUrl: text("repair_repository_url"),
+    repairBaseCommit: text("repair_base_commit"),
+    repairBackend: text("repair_backend"),
+    repairEnvironment: text("repair_environment"),
+    repairTrustLevel: text("repair_trust_level"),
+    repairAutoTrigger: integer("repair_auto_trigger", { mode: "boolean" })
+      .default(false)
+      .notNull(),
     createdAt: text("created_at").notNull(),
   },
   (table) => ({

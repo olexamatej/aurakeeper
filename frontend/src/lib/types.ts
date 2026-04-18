@@ -19,7 +19,18 @@ export interface StoredProject {
   id: string
   name: string
   token: string
+  repair?: ProjectRepairSettings
   createdAt: string
+}
+
+export interface ProjectRepairSettings {
+  checkoutPath: string
+  repositoryUrl?: string
+  baseCommit?: string
+  backend?: "auto" | "docker" | "local"
+  environment?: "production" | "hosted" | "local" | "development"
+  trustLevel?: "trusted" | "untrusted"
+  autoTrigger?: boolean
 }
 
 export interface ServiceDescriptor {
@@ -119,4 +130,10 @@ export interface RepairAttempt {
   finishedAt: string
   createdAt: string
   artifacts: RepairArtifact[]
+}
+
+export interface RepairAttemptAccepted {
+  status: "queued" | "already_running"
+  state: ErrorLogState
+  logId: string
 }

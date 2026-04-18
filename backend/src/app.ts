@@ -6,6 +6,12 @@ import { db } from "./db";
 import { getExampleRun, listExamples, startExampleRun } from "./examples";
 import { errorLogs, projects } from "./schema";
 import {
+  repairCoordinator as defaultRepairCoordinator,
+  requireProjectRepairTarget,
+  shouldAutoTriggerRepair,
+  type RepairCoordinator,
+} from "./repair-service";
+import {
   listRepairAttemptsForErrorLog,
   readRepairArtifactContent,
 } from "./repair-artifacts";
@@ -14,9 +20,11 @@ import { insertErrorLog, serializeErrorLog } from "./error-logs";
 import { createSentrySource, pollSentrySource } from "./sentry";
 import {
   ApiError,
+  parseCreateRepairAttemptRequest,
   parseCreateProjectRequest,
   parseCreateSentrySourceRequest,
   parseErrorLogRequest,
+  parseUpdateProjectRequest,
 } from "./validation";
 
 const DEFAULT_ALLOWED_HEADERS = "Content-Type, X-Admin-Token, X-API-Token";
@@ -72,6 +80,44 @@ async function parseJsonBody(request: Request): Promise<unknown> {
       "Request body must be valid JSON",
     );
   }
+}
+
+async function parseOptionalJsonBody(request: Request): Promise<unknown> {
+  const rawBody = await request.text();
+
+  if (rawBody.trim().length === 0) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Request body must be valid JSON",
+    );
+  }
+}
+
+function serializeProject(project: typeof projects.$inferSelect) {
+  return {
+    id: project.id,
+    name: project.name,
+    token: project.token,
+    repair: project.repairCheckoutPath
+      ? {
+          checkoutPath: project.repairCheckoutPath,
+          repositoryUrl: project.repairRepositoryUrl ?? undefined,
+          baseCommit: project.repairBaseCommit ?? undefined,
+          backend: project.repairBackend ?? undefined,
+          environment: project.repairEnvironment ?? undefined,
+          trustLevel: project.repairTrustLevel ?? undefined,
+          autoTrigger: project.repairAutoTrigger,
+        }
+      : undefined,
+    createdAt: project.createdAt,
+  };
 }
 
 function requireProjectByApiToken(apiToken: string | null) {
@@ -150,7 +196,24 @@ function requireErrorLogForProject(projectId: string, errorLogId: string) {
 
   return errorLog;
 }
-export const app = new Elysia()
+
+function requireProjectById(projectId: string) {
+  const project = db
+    .select()
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .get();
+
+  if (!project) {
+    throw new ApiError(404, "not_found", "Project not found");
+  }
+
+  return project;
+}
+export function createApp(options: { repairCoordinator?: RepairCoordinator } = {}) {
+  const repairCoordinator = options.repairCoordinator ?? defaultRepairCoordinator;
+
+  return new Elysia()
   .onRequest(({ request, set }) => {
     const corsHeaders: Record<string, string> = {};
     const origin = request.headers.get("origin");
@@ -224,18 +287,82 @@ export const app = new Elysia()
         id,
         name: payload.name,
         token,
+        repairCheckoutPath: payload.repair?.checkoutPath ?? null,
+        repairRepositoryUrl: payload.repair?.repositoryUrl ?? null,
+        repairBaseCommit: payload.repair?.baseCommit ?? null,
+        repairBackend: payload.repair?.backend ?? null,
+        repairEnvironment: payload.repair?.environment ?? null,
+        repairTrustLevel: payload.repair?.trustLevel ?? null,
+        repairAutoTrigger: payload.repair?.autoTrigger ?? false,
         createdAt,
       })
       .run();
 
     set.status = 201;
 
-    return {
-      id,
-      name: payload.name,
-      token,
-      createdAt,
-    };
+    const project = db.select().from(projects).where(eq(projects.id, id)).get();
+
+    if (!project) {
+      throw new ApiError(500, "internal_error", "Failed to create project");
+    }
+
+    return serializeProject(project);
+  })
+  .patch("/v1/projects/:projectId", async ({ params, request }) => {
+    requireAdminToken(request.headers.get("x-admin-token"));
+    const project = requireProjectById(params.projectId);
+    const payload = parseUpdateProjectRequest(await parseJsonBody(request));
+
+    db.update(projects)
+      .set({
+        name: payload.name ?? project.name,
+        repairCheckoutPath:
+          payload.repair === undefined
+            ? project.repairCheckoutPath
+            : payload.repair === null
+              ? null
+              : payload.repair.checkoutPath,
+        repairRepositoryUrl:
+          payload.repair === undefined
+            ? project.repairRepositoryUrl
+            : payload.repair === null
+              ? null
+              : payload.repair.repositoryUrl ?? null,
+        repairBaseCommit:
+          payload.repair === undefined
+            ? project.repairBaseCommit
+            : payload.repair === null
+              ? null
+              : payload.repair.baseCommit ?? null,
+        repairBackend:
+          payload.repair === undefined
+            ? project.repairBackend
+            : payload.repair === null
+              ? null
+              : payload.repair.backend ?? null,
+        repairEnvironment:
+          payload.repair === undefined
+            ? project.repairEnvironment
+            : payload.repair === null
+              ? null
+              : payload.repair.environment ?? null,
+        repairTrustLevel:
+          payload.repair === undefined
+            ? project.repairTrustLevel
+            : payload.repair === null
+              ? null
+              : payload.repair.trustLevel ?? null,
+        repairAutoTrigger:
+          payload.repair === undefined
+            ? project.repairAutoTrigger
+            : payload.repair === null
+              ? false
+              : payload.repair.autoTrigger ?? false,
+      })
+      .where(eq(projects.id, project.id))
+      .run();
+
+    return serializeProject(requireProjectById(project.id));
   })
   .get("/v1/examples", async ({ request }) => {
     requireAdminToken(request.headers.get("x-admin-token"));
@@ -283,8 +410,15 @@ export const app = new Elysia()
   .post("/v1/logs/errors", async ({ request, set }) => {
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));
     const payload = parseErrorLogRequest(await parseJsonBody(request));
+    const accepted = insertErrorLog(project.id, payload);
+
+    if (shouldAutoTriggerRepair(project)) {
+      const errorLog = requireErrorLogForProject(project.id, accepted.id);
+      repairCoordinator.startRepair(project, errorLog);
+    }
+
     set.status = 202;
-    return insertErrorLog(project.id, payload);
+    return accepted;
   })
   .post("/v1/sources/sentry", async ({ request, set }) => {
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));
@@ -297,7 +431,36 @@ export const app = new Elysia()
   .post("/v1/sources/sentry/:sourceId/poll", async ({ request, params }) => {
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));
 
-    return pollSentrySource(project.id, params.sourceId);
+    return pollSentrySource(project, params.sourceId, {
+      onImportedErrorLog(errorLog) {
+        if (shouldAutoTriggerRepair(project)) {
+          repairCoordinator.startRepair(project, errorLog);
+        }
+      },
+    });
+  })
+  .post("/v1/logs/errors/:logId/repair-attempts", async ({ request, params, set }) => {
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    requireProjectRepairTarget(project);
+    const errorLog = requireErrorLogForProject(project.id, params.logId);
+    const payload = parseCreateRepairAttemptRequest(await parseOptionalJsonBody(request));
+
+    set.status = 202;
+
+    return repairCoordinator.startRepair(project, errorLog, {
+      issueSummary: payload.issueSummary,
+    });
+  })
+  .get("/v1/logs/errors/:logId/repair-status", ({ request, params }) => {
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
+    requireErrorLogForProject(project.id, params.logId);
+
+    const activeStatus = repairCoordinator.getActiveStatus(params.logId);
+
+    return activeStatus ?? {
+      running: false,
+      logId: params.logId,
+    };
   })
   .get("/v1/logs/errors/:logId/repair-attempts", ({ request, params }) => {
     const project = requireProjectByApiToken(request.headers.get("x-api-token"));
@@ -325,3 +488,6 @@ export const app = new Elysia()
       },
     });
   });
+}
+
+export const app = createApp();

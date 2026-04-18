@@ -8,7 +8,7 @@ import {
   mapSentryEventToErrorLogRequest,
   type SentrySourceConfig,
 } from "./sentry-client";
-import { sentrySources } from "./schema";
+import { errorLogs, sentrySources, projects } from "./schema";
 import { ApiError, type CreateSentrySourceRequest } from "./validation";
 
 function createSentrySourceId(): string {
@@ -60,13 +60,14 @@ export function createSentrySource(
 }
 
 export async function pollSentrySource(
-  projectId: string,
+  project: typeof projects.$inferSelect,
   sourceId: string,
   options?: {
     fetchImpl?: (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
+    onImportedErrorLog?: (errorLog: typeof errorLogs.$inferSelect) => void;
   }
 ) {
-  const row = requireSentrySource(projectId, sourceId);
+  const row = requireSentrySource(project.id, sourceId);
   const startedAt = new Date().toISOString();
 
   try {
@@ -95,12 +96,22 @@ export async function pollSentrySource(
         continue;
       }
 
-      if (payload.eventId && hasStoredEvent(projectId, payload.eventId)) {
+      if (payload.eventId && hasStoredEvent(project.id, payload.eventId)) {
         duplicateCount += 1;
         continue;
       }
 
-      insertErrorLog(projectId, payload);
+      const accepted = insertErrorLog(project.id, payload);
+      const errorLog = db
+        .select()
+        .from(errorLogs)
+        .where(eq(errorLogs.id, accepted.id))
+        .get();
+
+      if (errorLog) {
+        options?.onImportedErrorLog?.(errorLog);
+      }
+
       importedCount += 1;
     }
 

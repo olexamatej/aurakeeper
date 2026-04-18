@@ -78,6 +78,26 @@ export type ErrorLogRequest = {
 
 export type CreateProjectRequest = {
   name: string;
+  repair?: ProjectRepairSettings;
+};
+
+export type UpdateProjectRequest = {
+  name?: string;
+  repair?: ProjectRepairSettings | null;
+};
+
+export type ProjectRepairSettings = {
+  checkoutPath: string;
+  repositoryUrl?: string;
+  baseCommit?: string;
+  backend?: "docker" | "local" | "auto";
+  environment?: "production" | "hosted" | "local" | "development";
+  trustLevel?: "trusted" | "untrusted";
+  autoTrigger?: boolean;
+};
+
+export type CreateRepairAttemptRequest = {
+  issueSummary?: string;
 };
 
 export type CreateSentrySourceRequest = {
@@ -298,6 +318,75 @@ function parseServiceDescriptorOverrides(
   };
 }
 
+function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  assertObject(value, "repair");
+  assertAllowedKeys(
+    value,
+    [
+      "checkoutPath",
+      "repositoryUrl",
+      "baseCommit",
+      "backend",
+      "environment",
+      "trustLevel",
+      "autoTrigger",
+    ],
+    "repair"
+  );
+
+  const checkoutPath = getRequiredString(value, "checkoutPath", "repair");
+  const repositoryUrl = getOptionalNonEmptyString(value, "repositoryUrl", "repair");
+  const baseCommit = getOptionalNonEmptyString(value, "baseCommit", "repair");
+  const backend = getOptionalNonEmptyString(value, "backend", "repair");
+  const environment = getOptionalNonEmptyString(value, "environment", "repair");
+  const trustLevel = getOptionalNonEmptyString(value, "trustLevel", "repair");
+  const autoTrigger = getOptionalBoolean(value, "autoTrigger", "repair");
+
+  if (backend && backend !== "docker" && backend !== "local" && backend !== "auto") {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "repair.backend must be one of: auto, docker, local"
+    );
+  }
+
+  if (
+    environment &&
+    environment !== "production" &&
+    environment !== "hosted" &&
+    environment !== "local" &&
+    environment !== "development"
+  ) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "repair.environment must be one of: production, hosted, local, development"
+    );
+  }
+
+  if (trustLevel && trustLevel !== "trusted" && trustLevel !== "untrusted") {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "repair.trustLevel must be one of: trusted, untrusted"
+    );
+  }
+
+  return {
+    checkoutPath,
+    repositoryUrl,
+    baseCommit,
+    backend: backend as ProjectRepairSettings["backend"] | undefined,
+    environment: environment as ProjectRepairSettings["environment"] | undefined,
+    trustLevel: trustLevel as ProjectRepairSettings["trustLevel"] | undefined,
+    autoTrigger,
+  };
+}
+
 function parseErrorSource(value: unknown): ErrorSource {
   assertObject(value, "source");
   assertAllowedKeys(value, ["runtime", "language", "framework", "component"], "source");
@@ -461,10 +550,47 @@ export function parseErrorLogRequest(value: unknown): ErrorLogRequest {
 
 export function parseCreateProjectRequest(value: unknown): CreateProjectRequest {
   assertObject(value, "body");
-  assertAllowedKeys(value, ["name"], "body");
+  assertAllowedKeys(value, ["name", "repair"], "body");
 
   return {
     name: getRequiredString(value, "name", "body"),
+    repair: parseProjectRepairSettings(value.repair),
+  };
+}
+
+export function parseUpdateProjectRequest(value: unknown): UpdateProjectRequest {
+  assertObject(value, "body");
+  assertAllowedKeys(value, ["name", "repair"], "body");
+
+  const name = getOptionalNonEmptyString(value, "name", "body");
+  let repair: ProjectRepairSettings | null | undefined;
+
+  if (value.repair === null) {
+    repair = null;
+  } else {
+    repair = parseProjectRepairSettings(value.repair);
+  }
+
+  if (name === undefined && repair === undefined) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "body must include at least one of: name, repair"
+    );
+  }
+
+  return {
+    name,
+    repair,
+  };
+}
+
+export function parseCreateRepairAttemptRequest(value: unknown): CreateRepairAttemptRequest {
+  assertObject(value, "body");
+  assertAllowedKeys(value, ["issueSummary"], "body");
+
+  return {
+    issueSummary: getOptionalNonEmptyString(value, "issueSummary", "body"),
   };
 }
 

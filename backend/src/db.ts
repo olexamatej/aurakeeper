@@ -23,6 +23,13 @@ sqlite.exec(`
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     token TEXT NOT NULL,
+    repair_checkout_path TEXT,
+    repair_repository_url TEXT,
+    repair_base_commit TEXT,
+    repair_backend TEXT,
+    repair_environment TEXT,
+    repair_trust_level TEXT,
+    repair_auto_trigger INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
 
@@ -146,6 +153,36 @@ if (!hasColumn("error_logs", "project_id")) {
 
 if (!hasColumn("error_logs", "state")) {
   sqlite.exec("ALTER TABLE error_logs ADD COLUMN state TEXT NOT NULL DEFAULT 'new_error';");
+}
+
+if (!hasColumn("projects", "repair_checkout_path")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN repair_checkout_path TEXT;");
+}
+
+if (!hasColumn("projects", "repair_repository_url")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN repair_repository_url TEXT;");
+}
+
+if (!hasColumn("projects", "repair_base_commit")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN repair_base_commit TEXT;");
+}
+
+if (!hasColumn("projects", "repair_backend")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN repair_backend TEXT;");
+}
+
+if (!hasColumn("projects", "repair_environment")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN repair_environment TEXT;");
+}
+
+if (!hasColumn("projects", "repair_trust_level")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN repair_trust_level TEXT;");
+}
+
+if (!hasColumn("projects", "repair_auto_trigger")) {
+  sqlite.exec(
+    "ALTER TABLE projects ADD COLUMN repair_auto_trigger INTEGER NOT NULL DEFAULT 0;"
+  );
 }
 
 sqlite.exec(`

@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,7 +88,7 @@ function spawnDefinition(
     apiToken: string;
     endpoint?: string;
   }
-): ChildProcessWithoutNullStreams {
+): ChildProcessByStdio<null, Readable, Readable> {
   const [file, ...args] = example.command;
 
   return spawn(file, args, {

@@ -69,13 +69,7 @@ export function insertErrorLog(
 }
 
 export function serializeErrorLog(row: typeof errorLogs.$inferSelect) {
-  let payload: ReturnType<typeof JSON.parse> | null = null;
-
-  try {
-    payload = JSON.parse(row.rawPayload);
-  } catch {
-    payload = null;
-  }
+  const payload = parseStoredErrorLogPayload(row);
 
   return {
     id: row.id,
@@ -84,4 +78,21 @@ export function serializeErrorLog(row: typeof errorLogs.$inferSelect) {
     createdAt: row.createdAt,
     ...(payload ?? {}),
   };
+}
+
+export function parseStoredErrorLogPayload(
+  row: Pick<typeof errorLogs.$inferSelect, "rawPayload">
+): ReturnType<typeof JSON.parse> | null {
+  try {
+    return JSON.parse(row.rawPayload);
+  } catch {
+    return null;
+  }
+}
+
+export function updateErrorLogState(errorLogId: string, state: IssueState): void {
+  db.update(errorLogs)
+    .set({ state })
+    .where(eq(errorLogs.id, errorLogId))
+    .run();
 }

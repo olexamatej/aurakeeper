@@ -46,6 +46,12 @@ paths:
               $ref: '#/components/schemas/CreateProjectRequest'
             example:
               name: aura-web
+              repair:
+                checkoutPath: /srv/repos/aura-web
+                backend: local
+                environment: local
+                trustLevel: trusted
+                autoTrigger: true
       responses:
         '201':
           description: Project created successfully
@@ -57,6 +63,12 @@ paths:
                 id: proj_01HSV70H854RZ8B4C2Q5QF6X5A
                 name: aura-web
                 token: ak_95f20e153965417ba49d7d88c240b4fb4fbc2f63fcc74291
+                repair:
+                  checkoutPath: /srv/repos/aura-web
+                  backend: local
+                  environment: local
+                  trustLevel: trusted
+                  autoTrigger: true
                 createdAt: "2026-04-18T08:30:00Z"
         '400':
           description: Invalid request payload
@@ -76,6 +88,54 @@ paths:
               example:
                 error: unauthorized
                 message: Admin token is missing or invalid
+  /v1/projects/{projectId}:
+    patch:
+      tags:
+        - Projects
+      operationId: updateProject
+      summary: Update a project
+      description: >
+        Updates the stored metadata or repair settings for an existing project.
+        Send `"repair": null` to clear the repair target entirely.
+      security:
+        - adminTokenAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: Project updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectCreated'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid admin token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/examples:
     get:
       tags:
@@ -491,6 +551,53 @@ paths:
                 error: upstream_error
                 message: Sentry rejected the request. Check the auth token and project scope.
   /v1/logs/errors/{logId}/repair-attempts:
+    post:
+      tags:
+        - Repair Attempts
+      operationId: createRepairAttemptForErrorLog
+      summary: Start a repair attempt for an error log
+      description: >
+        Queues the orchestrator and fix agents for a specific stored error log
+        using the authenticated project's configured repair target.
+      security:
+        - apiTokenAuth: []
+      parameters:
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRepairAttemptRequest'
+      responses:
+        '202':
+          description: Repair attempt queued or already running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepairAttemptAccepted'
+        '401':
+          description: Missing or invalid API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Error log not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Project is missing repair configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     get:
       tags:
         - Repair Attempts
@@ -597,6 +704,8 @@ components:
           examples:
             - aura-web
             - aura-api
+        repair:
+          $ref: '#/components/schemas/ProjectRepairSettings'
 
     ProjectCreated:
       type: object
@@ -616,9 +725,60 @@ components:
         token:
           type: string
           description: Project token to include in the X-API-Token header for log ingestion.
+        repair:
+          $ref: '#/components/schemas/ProjectRepairSettings'
         createdAt:
           type: string
           format: date-time
+
+    UpdateProjectRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Updated human-readable project name.
+        repair:
+          oneOf:
+            - $ref: '#/components/schemas/ProjectRepairSettings'
+            - type: 'null'
+
+    ProjectRepairSettings:
+      type: object
+      additionalProperties: false
+      required:
+        - checkoutPath
+      properties:
+        checkoutPath:
+          type: string
+          description: Local repository checkout path that AuraKeeper may patch and verify.
+        repositoryUrl:
+          type: string
+          description: Optional repository URL for metadata or traceability.
+        baseCommit:
+          type: string
+          description: Optional commit SHA to associate with repair attempts.
+        backend:
+          type: string
+          enum:
+            - auto
+            - docker
+            - local
+        environment:
+          type: string
+          enum:
+            - production
+            - hosted
+            - local
+            - development
+        trustLevel:
+          type: string
+          enum:
+            - trusted
+            - untrusted
+        autoTrigger:
+          type: boolean
+          description: Whether newly accepted error logs should automatically queue a repair attempt.
 
     CreateSentrySourceRequest:
       type: object
@@ -1082,6 +1242,32 @@ components:
           type: string
           format: date-time
         url:
+          type: string
+
+    CreateRepairAttemptRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        issueSummary:
+          type: string
+          description: Optional human-written summary to prepend to the agent task.
+
+    RepairAttemptAccepted:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - state
+        - logId
+      properties:
+        status:
+          type: string
+          enum:
+            - queued
+            - already_running
+        state:
+          $ref: '#/components/schemas/ErrorLogState'
+        logId:
           type: string
 
     RepairAttempt:

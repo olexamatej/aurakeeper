@@ -13,7 +13,14 @@ export function getProjects(): StoredProject[] {
 
 export function addProject(project: StoredProject): void {
   const projects = getProjects()
-  projects.push(project)
+  const existingIndex = projects.findIndex((entry) => entry.id === project.id)
+
+  if (existingIndex >= 0) {
+    projects[existingIndex] = project
+  } else {
+    projects.push(project)
+  }
+
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects))
 }
 

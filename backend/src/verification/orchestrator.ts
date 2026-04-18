@@ -254,6 +254,13 @@ export type RepairOrchestrationRequest = {
 
 export type RepairOrchestrationOptions = {
   agentPromptDir?: string;
+  onStageChange?: (update: {
+    repairAttemptId: string;
+    stage: RepairOrchestrationReport["stage"];
+    detail: string;
+    selectedBackend?: ExecutionBackendId;
+    profileId?: string;
+  }) => void | Promise<void>;
 };
 
 export type RepairOrchestrationReport = {
@@ -990,6 +997,19 @@ async function writeOrchestrationReport(
   return report;
 }
 
+async function notifyStageChange(
+  options: RepairOrchestrationOptions,
+  update: {
+    repairAttemptId: string;
+    stage: RepairOrchestrationReport["stage"];
+    detail: string;
+    selectedBackend?: ExecutionBackendId;
+    profileId?: string;
+  }
+): Promise<void> {
+  await options.onStageChange?.(update);
+}
+
 function finalStatusFromTester(
   tester: TesterAgentOutput,
   verification: VerificationRunReport
@@ -1039,6 +1059,11 @@ export async function orchestrateRepair(
   });
 
   if (selection.status === "blocked") {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "backend_selection",
+      detail: selection.reason,
+    });
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
@@ -1061,6 +1086,12 @@ export async function orchestrateRepair(
   let prompts: AgentPromptSet | undefined;
 
   try {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "context",
+      detail: "Preparing codebase context and loading agent prompts.",
+      selectedBackend: selection.backend,
+    });
     profile = await selectTechnologyProfile(sourceRoot, config.profiles);
     codebase = await buildCodebaseContext({
       rootPath: sourceRoot,
@@ -1075,6 +1106,13 @@ export async function orchestrateRepair(
     );
     prompts = await loadAgentPromptSet(options.agentPromptDir);
   } catch (error) {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "context",
+      detail: errorMessage(error),
+      selectedBackend: selection.backend,
+      profileId: profile?.id,
+    });
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
@@ -1144,6 +1182,14 @@ export async function orchestrateRepair(
     })
   );
 
+  await notifyStageChange(options, {
+    repairAttemptId,
+    stage: "replicator",
+    detail: "Replicator is reproducing and narrowing the failing path.",
+    selectedBackend: selection.backend,
+    profileId: profile.id,
+  });
+
   agents.replicator = await executeAgent<ReplicatorAgentInput, ReplicatorAgentOutput>({
     role: "replicator",
     prompt: prompts.replicator,
@@ -1162,6 +1208,13 @@ export async function orchestrateRepair(
   });
 
   if (agents.replicator.error || !agents.replicator.output) {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "replicator",
+      detail: agents.replicator.error ?? "Replicator did not return a usable result.",
+      selectedBackend: selection.backend,
+      profileId: profile.id,
+    });
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
@@ -1184,6 +1237,13 @@ export async function orchestrateRepair(
   }
 
   if (agents.replicator.output.status === "needs_context") {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "replicator",
+      detail: "Replicator needs more context before a safe fix can start.",
+      selectedBackend: selection.backend,
+      profileId: profile.id,
+    });
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
@@ -1204,6 +1264,14 @@ export async function orchestrateRepair(
     );
   }
 
+  await notifyStageChange(options, {
+    repairAttemptId,
+    stage: "worker",
+    detail: "Worker is preparing and validating a minimal patch.",
+    selectedBackend: selection.backend,
+    profileId: profile.id,
+  });
+
   agents.worker = await executeAgent<WorkerAgentInput, WorkerAgentOutput>({
     role: "worker",
     prompt: prompts.worker,
@@ -1221,6 +1289,13 @@ export async function orchestrateRepair(
   });
 
   if (agents.worker.error || !agents.worker.output) {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "worker",
+      detail: agents.worker.error ?? "Worker did not return a usable result.",
+      selectedBackend: selection.backend,
+      profileId: profile.id,
+    });
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
@@ -1243,6 +1318,16 @@ export async function orchestrateRepair(
   }
 
   if (agents.worker.output.status !== "patched" || !agents.worker.output.patch) {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "worker",
+      detail:
+        agents.worker.output.status === "needs_context"
+          ? "Worker needs more context before producing a safe patch."
+          : "Worker did not produce a patch.",
+      selectedBackend: selection.backend,
+      profileId: profile.id,
+    });
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
@@ -1271,6 +1356,14 @@ export async function orchestrateRepair(
     testerUsesBrowser || request.keepWorkspace || config.local?.keepWorkspace || false;
   const cleanupVerificationWorkspaceAfterTester =
     testerUsesBrowser && !request.keepWorkspace && !config.local?.keepWorkspace;
+
+  await notifyStageChange(options, {
+    repairAttemptId,
+    stage: "verification",
+    detail: "Applying the patch and running verification suites.",
+    selectedBackend: selection.backend,
+    profileId: profile.id,
+  });
   const verification = await runVerification({
     repairAttemptId,
     repository: request.repository,
@@ -1300,6 +1393,13 @@ export async function orchestrateRepair(
   });
 
   try {
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "tester",
+      detail: "Tester is reviewing verification results and regression risk.",
+      selectedBackend: selection.backend,
+      profileId: profile.id,
+    });
     agents.tester = await executeAgent<TesterAgentInput, TesterAgentOutput>({
       role: "tester",
       prompt: prompts.tester,
@@ -1323,6 +1423,16 @@ export async function orchestrateRepair(
     });
 
     if (agents.tester.error || !agents.tester.output) {
+      await notifyStageChange(options, {
+        repairAttemptId,
+        stage: "tester",
+        detail:
+          agents.tester.error ??
+          verification.failureReason ??
+          "Tester did not return a usable result.",
+        selectedBackend: selection.backend,
+        profileId: profile.id,
+      });
       return writeOrchestrationReport(
         reportFromBase({
           repairAttemptId,
@@ -1348,6 +1458,17 @@ export async function orchestrateRepair(
     }
 
     const final = finalStatusFromTester(agents.tester.output, verification);
+
+    await notifyStageChange(options, {
+      repairAttemptId,
+      stage: "complete",
+      detail:
+        final.status === "passed"
+          ? "Repair completed and verification passed."
+          : final.failureReason ?? verification.failureReason ?? "Repair completed with failures.",
+      selectedBackend: selection.backend,
+      profileId: profile.id,
+    });
 
     return writeOrchestrationReport(
       reportFromBase({

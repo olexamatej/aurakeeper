@@ -41,3 +41,5 @@ yarn-error.log*
 data/*.sqlite
 package-lock.json
 **/*.bun
+
+/data/artifacts/

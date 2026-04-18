@@ -1,4 +1,12 @@
-import type { ErrorLog, ExampleDefinition, ExampleRun, RepairAttempt, StoredProject } from "./types"
+import type {
+  ErrorLog,
+  ExampleDefinition,
+  ExampleRun,
+  ProjectRepairSettings,
+  RepairAttempt,
+  RepairAttemptAccepted,
+  StoredProject,
+} from "./types"
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000"
 const ADMIN_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? ""
@@ -26,14 +34,35 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json()
 }
 
-export async function createProject(name: string): Promise<StoredProject> {
+export async function createProject(input: {
+  name: string
+  repair?: ProjectRepairSettings
+}): Promise<StoredProject> {
   const response = await fetch(`${API_URL}/v1/projects`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Admin-Token": ADMIN_TOKEN,
     },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(input),
+  })
+  return handleResponse<StoredProject>(response)
+}
+
+export async function updateProject(
+  projectId: string,
+  input: {
+    name?: string
+    repair?: ProjectRepairSettings | null
+  },
+): Promise<StoredProject> {
+  const response = await fetch(`${API_URL}/v1/projects/${projectId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Admin-Token": ADMIN_TOKEN,
+    },
+    body: JSON.stringify(input),
   })
   return handleResponse<StoredProject>(response)
 }
@@ -90,6 +119,22 @@ export async function listRepairAttempts(
     },
   })
   return handleResponse<RepairAttempt[]>(response)
+}
+
+export async function startRepairAttempt(
+  apiToken: string,
+  logId: string,
+  issueSummary?: string,
+): Promise<RepairAttemptAccepted> {
+  const response = await fetch(`${API_URL}/v1/logs/errors/${logId}/repair-attempts`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Token": apiToken,
+    },
+    body: JSON.stringify(issueSummary ? { issueSummary } : {}),
+  })
+  return handleResponse<RepairAttemptAccepted>(response)
 }
 
 export function artifactUrl(logId: string, artifactId: string): string {

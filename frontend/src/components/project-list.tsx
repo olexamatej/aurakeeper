@@ -78,8 +78,23 @@ export function ProjectList({
                 )}
               >
                 <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="flex-1 truncate">{project.name}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate">{project.name}</div>
+                  {project.repair?.checkoutPath ? (
+                    <div className="truncate text-xs text-muted-foreground">
+                      {project.repair.autoTrigger ? "Auto-fix on" : "Manual fix only"}
+                    </div>
+                  ) : null}
+                </div>
                 <span className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <CreateProjectDialog project={project} onCreated={handleCreated} />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Edit project</TooltipContent>
+                  </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
