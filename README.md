@@ -110,6 +110,7 @@ Initial SDKs:
 - JVM in [`connectors/jvm`](./connectors/jvm)
 - .NET in [`connectors/dotnet`](./connectors/dotnet)
 - Ruby in [`connectors/ruby`](./connectors/ruby)
+- PHP in [`connectors/php`](./connectors/php)
 
 ## Product CLI
 
@@ -157,7 +158,59 @@ make list
 
 Examples default to `http://127.0.0.1:3000/v1/logs/errors`. Override that with
 `AURAKEEPER_ENDPOINT` when the backend runs elsewhere.
-- PHP in [`connectors/php`](./connectors/php)
+
+You can also run these from `examples/` directly:
+
+```bash
+cd examples
+AURAKEEPER_API_TOKEN=<project-token> make run python
+```
+
+Run every registered example (aggregated exit status):
+
+```bash
+make run-all
+```
+
+## Test And Build Workflow
+
+The repository currently has automated tests in the backend package only
+(`backend/src/*.test.ts` and `backend/src/verification/verification.test.ts`),
+run by Bun:
+
+```bash
+make test
+```
+
+Common validation commands at repository root:
+
+```bash
+make bootstrap  # installs local project dependencies
+make check      # backend type-check + frontend lint
+make build      # backend check + frontend build + jvm/.NET compile
+make doctor     # verifies required toolchain commands are available
+make validate   # doctor + bootstrap + test + check + build
+make validate-all # validate + run-all examples
+make validate-container # same as validate-all inside the dev container toolchain
+```
+
+## Isolated Development Environment
+
+To avoid polluting host/global runtimes, this repository includes a dev
+container in `.devcontainer/` with the required multi-language toolchain:
+
+- Node.js + npm + pnpm
+- Bun
+- Python
+- Ruby
+- PHP
+- Go
+- Java + Maven
+- .NET SDK
+
+Open the workspace in VS Code and run **Dev Containers: Reopen in Container**.
+On first start, `.devcontainer/post-create.sh` runs and executes
+`make bootstrap` automatically inside the container.
 
 SDK responsibilities:
 

@@ -1,0 +1,7 @@
+__pycache__/
+.next/
+expo/
+.venv/
+.venv-1/
+.pnpm-store/
+.devcontainer/
