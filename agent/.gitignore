@@ -1,0 +1,11 @@
+.claude/
+__pycache__/
+.env
+logs/*
+state/*
+worktrees/*
+!logs/.gitkeep
+!state/.gitkeep
+!worktrees/.gitkeep
+node_modules/
+frontend/dist/
