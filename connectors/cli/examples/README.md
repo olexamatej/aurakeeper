@@ -18,7 +18,7 @@ AURAKEEPER_ENDPOINT=http://127.0.0.1:3000/v1/logs/errors \
 
 This example captures a failed subprocess and flushes the event before exit.
 
-## Uncaught exception
+## Broken task-planner mini-project
 
 ```sh
 AURAKEEPER_API_TOKEN=your-token node uncaught.js
@@ -32,5 +32,12 @@ AURAKEEPER_ENDPOINT=http://127.0.0.1:3000/v1/logs/errors \
   node uncaught.js
 ```
 
-This example installs the process hooks, triggers an uncaught exception, and
-lets the connector drain the send before the process dies.
+This example installs the process hooks and formats a task missing assignee
+data. That realistic bug raises an uncaught exception and lets the connector
+drain the send before the process dies.
+
+The verification command currently fails until the fallback behavior is fixed:
+
+```sh
+node task-planner.test.js
+```

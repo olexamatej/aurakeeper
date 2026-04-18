@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 
+from app import build_invoice_summary
 from aurakeeper import create_aurakeeper_connector
 
 
@@ -24,7 +25,7 @@ def main() -> None:
         service_version="1.0.0",
         environment=os.getenv("PYTHON_ENV", "development"),
         framework="python",
-        component="example-worker",
+        component="invoice-worker",
         tags=["backend", "python-example"],
         context={
             "session": {
@@ -36,7 +37,7 @@ def main() -> None:
     connector.install()
 
     def crash_worker() -> None:
-        raise RuntimeError("Uncaught Python example error")
+        build_invoice_summary({"id": "INV-100", "total": 42.0})
 
     worker = threading.Thread(target=crash_worker, name="aurakeeper-example")
     worker.start()

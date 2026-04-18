@@ -1,6 +1,6 @@
 # JavaScript Connector Examples
 
-## Node.js runtime error
+## Node.js broken mini-project
 
 Run the Node example from this directory:
 
@@ -17,8 +17,15 @@ AURAKEEPER_ENDPOINT=http://127.0.0.1:3000/v1/logs/errors \
   node node/index.js
 ```
 
-The script installs the connector, triggers an uncaught exception, and lets the
-connector drain before the process exits.
+The script installs the connector and renders a profile object missing nested
+profile data. That realistic bug raises a runtime exception which AuraKeeper can
+ingest.
+
+The verification command currently fails until the fallback behavior is fixed:
+
+```sh
+node node/profile.test.js
+```
 
 ## Browser demo
 

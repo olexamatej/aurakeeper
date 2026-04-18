@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -46,8 +45,8 @@ func main() {
 	mux.HandleFunc("/", func(writer http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintf(writer, "Visit %s to trigger a runtime panic\n", panicPath)
 	})
-	mux.HandleFunc(panicPath, func(http.ResponseWriter, *http.Request) {
-		panic(errors.New("go runtime example panic"))
+	mux.HandleFunc(panicPath, func(writer http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintln(writer, renderProfile(profileUser{ID: "guest"}))
 	})
 
 	log.Printf("Listening on http://127.0.0.1:%s%s", appPort, panicPath)

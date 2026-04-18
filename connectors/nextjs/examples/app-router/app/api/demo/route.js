@@ -18,14 +18,31 @@ const connector =
 
 export const dynamic = "force-dynamic";
 
+function renderProfile(user) {
+  return `Profile: ${user.profile.displayName.toUpperCase()}`;
+}
+
 async function demoHandler(request) {
   const url = new URL(request.url);
 
   if (url.searchParams.get("fail") === "1") {
-    throw new Error("Example App Router failure");
+    return Response.json({
+      message: renderProfile({
+        id: "guest",
+      }),
+    });
   }
 
   return Response.json({ ok: true });
+}
+
+export function testRenderProfileFallback() {
+  const actual = renderProfile({ id: "guest" });
+  const expected = "Profile: GUEST";
+
+  if (actual !== expected) {
+    throw new Error(`Expected ${expected}, got ${actual}`);
+  }
 }
 
 export const GET =

@@ -1,4 +1,5 @@
 const { createAuraKeeperCliConnector } = require("../aurakeeper");
+const { summarizeTask } = require("./task-planner");
 
 if (!process.env.AURAKEEPER_API_TOKEN) {
   console.error("Set AURAKEEPER_API_TOKEN before running this example.");
@@ -12,11 +13,13 @@ const connector = createAuraKeeperCliConnector({
   serviceName: "cli-example",
   serviceVersion: "0.1.0",
   environment: "development",
-  component: "uncaught-demo",
+  component: "task-planner",
 });
 
 connector.install();
 
-setTimeout(function throwUnhandledError() {
-  throw new Error("Uncaught CLI crash");
+setTimeout(function renderBrokenTask() {
+  summarizeTask({
+    title: "Rotate signing key",
+  });
 }, 10);

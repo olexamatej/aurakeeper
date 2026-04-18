@@ -1,8 +1,8 @@
 # Go Example
 
-The HTTP example listens on a configurable app port and raises a runtime panic
-at a configurable path so the connector middleware can send the error to
-AuraKeeper.
+The HTTP example listens on a configurable app port and renders a profile object
+missing nested profile data. That realistic bug raises a runtime panic at a
+configurable path so the connector middleware can send the error to AuraKeeper.
 
 Run it from `connectors/go`:
 
@@ -15,3 +15,9 @@ go run ./examples/http
 ```
 
 Then visit `http://127.0.0.1:8080/panic` to trigger the runtime error.
+
+The verification command currently fails until the fallback behavior is fixed:
+
+```bash
+go test ./examples/http
+```

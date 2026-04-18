@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: doctor bootstrap test check build validate validate-all validate-container app-validate-container examples-doctor examples-validate examples-validate-container list run run-all
+.PHONY: doctor bootstrap test check build validate validate-all validate-container app-validate-container examples-doctor examples-validate examples-validate-container list run verify-example run-all
 
 EXAMPLE ?= $(word 2,$(MAKECMDGOALS))
 DEV_IMAGE ?= aurakeeper-dev:local
@@ -91,6 +91,9 @@ list:
 
 run:
 	@AURAKEEPER_API_TOKEN="$${AURAKEEPER_API_TOKEN:-dummy}" AURAKEEPER_ENDPOINT="$${AURAKEEPER_ENDPOINT}" node scripts/run-example.mjs "$(EXAMPLE)"
+
+verify-example:
+	@node scripts/verify-example.mjs "$(EXAMPLE)"
 
 run-all:
 	@ids=$$(node -e 'const r=require("./examples/registry.json"); console.log(r.map((e) => e.id).join(" "))'); \

@@ -1,6 +1,8 @@
 __pycache__/
 .next/
+.expo/
 expo/
+node_modules/
 .venv/
 .venv-1/
 .pnpm-store/

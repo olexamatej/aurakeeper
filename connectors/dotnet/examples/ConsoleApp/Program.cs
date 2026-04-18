@@ -1,5 +1,11 @@
 using AuraKeeper;
 
+if (args.Contains("--verify"))
+{
+    VerifyProfileFallback();
+    return;
+}
+
 var endpoint = Environment.GetEnvironmentVariable("AURAKEEPER_ENDPOINT")
     ?? "http://127.0.0.1:3000/v1/logs/errors";
 var apiToken = Environment.GetEnvironmentVariable("AURAKEEPER_API_TOKEN")
@@ -18,4 +24,29 @@ await using var connector = new AuraKeeperConnector(new AuraKeeperConnectorOptio
 });
 
 connector.Install();
-throw new InvalidOperationException("Uncaught .NET runtime example");
+RenderProfile(new Dictionary<string, object?>
+{
+    ["id"] = "guest"
+});
+
+static string RenderProfile(Dictionary<string, object?> user)
+{
+    var profile = (Dictionary<string, object?>)user["profile"]!;
+    return $"Profile: {((string)profile["displayName"]!).ToUpperInvariant()}";
+}
+
+static void VerifyProfileFallback()
+{
+    var actual = RenderProfile(new Dictionary<string, object?>
+    {
+        ["id"] = "guest"
+    });
+    const string expected = "Profile: GUEST";
+
+    if (actual != expected)
+    {
+        throw new InvalidOperationException($"Expected {expected}, got {actual}");
+    }
+
+    Console.WriteLine(".NET profile tests passed");
+}

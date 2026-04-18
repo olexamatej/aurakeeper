@@ -2,7 +2,7 @@
 
 ## Files
 
-- [`runtime-error.php`](./runtime-error.php): uncaught exception sent to a real AuraKeeper backend
+- [`runtime-error.php`](./runtime-error.php): broken profile renderer sent to a real AuraKeeper backend
 - [`basic.php`](./basic.php): CLI-style manual capture with a custom transport
 - [`web/index.php`](./web/index.php): small web entrypoint with automatic hooks
 
@@ -17,6 +17,12 @@ php connectors/php/examples/runtime-error.php
 
 The endpoint defaults to `http://127.0.0.1:3000/v1/logs/errors`. Set
 `AURAKEEPER_ENDPOINT` to override it.
+
+The verification command currently fails until the guest fallback is fixed:
+
+```bash
+php connectors/php/examples/profile_test.php
+```
 
 Web example:
 

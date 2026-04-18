@@ -235,17 +235,8 @@ function spawnExample(example) {
     cwd: resolve(repoRoot, example.cwd),
     env: example.env ?? process.env,
     detached: process.platform !== "win32",
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "inherit", "inherit"],
   });
-}
-
-function writeChunk(prefix, chunk) {
-  String(chunk)
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .forEach((line) => {
-      console.log(`${prefix}${line}`);
-    });
 }
 
 async function main() {
@@ -290,8 +281,6 @@ async function main() {
   await ensureSetup(example, exampleEnv);
 
   const child = spawnExample({ ...example, env: exampleEnv });
-  child.stdout.on("data", (chunk) => writeChunk("stdout: ", chunk));
-  child.stderr.on("data", (chunk) => writeChunk("stderr: ", chunk));
 
   let triggerStatus;
   if (example.triggerUrl) {

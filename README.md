@@ -144,30 +144,53 @@ Current command surface:
 
 ## Connector Examples
 
-Each connector has a small runtime-error example under its `examples/` directory.
-Create or select a project in the web UI, then use the Connector examples panel
-to launch a whitelisted local demo against that project.
+Each connector has a small broken mini-project under its `examples/` directory.
+The mini-projects contain realistic missing-data bugs, a runtime trigger that
+sends the failure to AuraKeeper, and a verification command that currently fails
+until the bug is fixed.
 
-The same demos can be run from the repository root:
+Recommended local demo flow:
+
+1. Start the backend:
 
 ```bash
-AURAKEEPER_API_TOKEN=<project-token> make run python
+cd backend
+bun run dev
 ```
 
-List available examples with:
+2. Create or select a project in the UI and copy its API token.
+3. Return to the repository root and list the available stacks:
 
 ```bash
 make list
 ```
 
+4. Run one broken example with that project token:
+
+```bash
+AURAKEEPER_API_TOKEN=<project-token> make run python
+```
+
+This starts the stack-specific mini-project, triggers its existing runtime bug,
+and attempts to send the captured error to AuraKeeper. After that, inspect the
+error in the UI or query it through the API.
+
+Run the matching failing verification command with:
+
+```bash
+make verify-example python
+```
+
 Examples default to `http://127.0.0.1:3000/v1/logs/errors`. Override that with
 `AURAKEEPER_ENDPOINT` when the backend runs elsewhere.
 
-You can also run these from `examples/` directly:
+The same commands also work from [`examples/Makefile`](./examples/Makefile):
 
 ```bash
 cd examples
+make list
 AURAKEEPER_API_TOKEN=<project-token> make run python
+make verify-example python
 ```
 
 Run every registered example (aggregated exit status):

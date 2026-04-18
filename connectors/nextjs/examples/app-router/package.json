@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "test": "node test-profile.mjs",
     "build": "next build",
     "start": "next start"
   },

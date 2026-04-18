@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/aurakeeper.php';
+require __DIR__ . '/profile.php';
 
 $apiToken = getenv('AURAKEEPER_API_TOKEN') ?: null;
 
@@ -18,10 +19,10 @@ $connector = AuraKeeper\create_aurakeeper_connector([
     'serviceVersion' => '1.0.0',
     'environment' => getenv('PHP_ENV') ?: 'development',
     'platform' => 'backend',
-    'component' => 'runtime-error',
+    'component' => 'profile-renderer',
     'tags' => ['backend', 'php'],
 ]);
 
 $connector->install();
 
-throw new RuntimeException('Uncaught PHP runtime example');
+renderProfile(['id' => 'guest']);
