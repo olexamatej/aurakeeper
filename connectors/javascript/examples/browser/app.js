@@ -1,13 +1,28 @@
 (function initBrowserExample() {
   var statusNode = document.getElementById("status");
+  var handledButton = document.getElementById("capture-handled");
+  var rejectionButton = document.getElementById("trigger-rejection");
   var endpoint = "https://api.example.com/v1/logs/errors";
   var apiToken = "replace-with-real-api-token";
-  var useMockTransport =
-    endpoint === "https://api.example.com/v1/logs/errors" ||
-    apiToken === "replace-with-real-api-token";
+  var isConfigured =
+    endpoint !== "https://api.example.com/v1/logs/errors" &&
+    apiToken !== "replace-with-real-api-token";
 
   function updateStatus(message) {
     statusNode.textContent = message;
+  }
+
+  function setButtonsDisabled(disabled) {
+    handledButton.disabled = disabled;
+    rejectionButton.disabled = disabled;
+  }
+
+  if (!isConfigured) {
+    setButtonsDisabled(true);
+    updateStatus(
+      "Replace the placeholder endpoint and API token in app.js before using this example."
+    );
+    return;
   }
 
   var connector = AuraKeeper.createAuraKeeperConnector({
@@ -24,15 +39,6 @@
         source: "examples/browser",
       },
     },
-    transport: useMockTransport
-      ? function mockTransport(config) {
-          console.log("AuraKeeper browser example payload", config.payload);
-          return {
-            status: 202,
-            mocked: true,
-          };
-        }
-      : undefined,
   });
 
   connector.install();
@@ -83,9 +89,8 @@
       Promise.reject(new Error("Unhandled browser example rejection"));
     });
 
+  setButtonsDisabled(false);
   updateStatus(
-    useMockTransport
-      ? "Browser connector installed. Using mock transport until you replace the example endpoint and token."
-      : "Browser connector installed. Captures will be sent to the configured AuraKeeper endpoint."
+    "Browser connector installed. Captures will be sent to the configured AuraKeeper endpoint."
   );
 })();

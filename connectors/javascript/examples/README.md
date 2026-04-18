@@ -15,9 +15,6 @@ Open [`browser/index.html`](./browser/index.html) in a browser after replacing
 the placeholder AuraKeeper endpoint and API token in
 [`browser/app.js`](./browser/app.js).
 
-If you leave the placeholder values unchanged, the example uses a mock
-transport and logs payloads locally instead of sending them.
-
 The browser example:
 
 - Installs automatic `error` and `unhandledrejection` handlers
@@ -37,9 +34,6 @@ Set these variables before running it against a real AuraKeeper environment:
 - `AURAKEEPER_ENDPOINT`
 - `AURAKEEPER_API_TOKEN`
 - `NODE_ENV`
-
-Without real values, the Node.js example also falls back to a mock transport and
-prints the normalized payload locally.
 
 The Node.js example:
 

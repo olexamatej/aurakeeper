@@ -1,31 +1,19 @@
 from __future__ import annotations
 
-import json
 import os
 from pprint import pprint
 
 from aurakeeper import create_aurakeeper_connector
 
-EXAMPLE_ENDPOINT = "https://api.example.com/v1/logs/errors"
-EXAMPLE_API_TOKEN = "replace-with-real-api-token"
-
-
-def build_transport(use_mock_transport: bool):
-    if not use_mock_transport:
-        return None
-
-    def mock_transport(config):
-        print("AuraKeeper standalone example payload")
-        print(json.dumps(config["payload"], indent=2, sort_keys=True))
-        return {"status": 202, "mocked": True}
-
-    return mock_transport
-
 
 def main() -> None:
-    endpoint = os.getenv("AURAKEEPER_ENDPOINT", EXAMPLE_ENDPOINT)
-    api_token = os.getenv("AURAKEEPER_API_TOKEN", EXAMPLE_API_TOKEN)
-    use_mock_transport = endpoint == EXAMPLE_ENDPOINT or api_token == EXAMPLE_API_TOKEN
+    endpoint = os.getenv("AURAKEEPER_ENDPOINT")
+    api_token = os.getenv("AURAKEEPER_API_TOKEN")
+
+    if not endpoint or not api_token:
+        raise SystemExit(
+            "Set AURAKEEPER_ENDPOINT and AURAKEEPER_API_TOKEN before running this example."
+        )
 
     connector = create_aurakeeper_connector(
         endpoint=endpoint,
@@ -41,7 +29,6 @@ def main() -> None:
                 "source": "examples/standalone",
             }
         },
-        transport=build_transport(use_mock_transport),
     )
 
     connector.install()
@@ -77,11 +64,7 @@ def main() -> None:
     pprint(message_future.result())
 
     connector.flush()
-    print(
-        "Connector flush completed using {} transport.".format(
-            "mock" if use_mock_transport else "live"
-        )
-    )
+    print("Connector flush completed.")
     connector.close(wait_for_pending=False)
 
 

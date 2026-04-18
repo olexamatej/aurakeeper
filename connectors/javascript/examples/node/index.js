@@ -1,11 +1,14 @@
 const { createAuraKeeperConnector } = require("../../aurakeeper");
 
-const exampleEndpoint = "https://api.example.com/v1/logs/errors";
-const exampleApiToken = "replace-with-real-api-token";
-const endpoint = process.env.AURAKEEPER_ENDPOINT || exampleEndpoint;
-const apiToken = process.env.AURAKEEPER_API_TOKEN || exampleApiToken;
-const useMockTransport =
-  endpoint === exampleEndpoint || apiToken === exampleApiToken;
+const endpoint = process.env.AURAKEEPER_ENDPOINT;
+const apiToken = process.env.AURAKEEPER_API_TOKEN;
+
+if (!endpoint || !apiToken) {
+  console.error(
+    "Set AURAKEEPER_ENDPOINT and AURAKEEPER_API_TOKEN before running this example."
+  );
+  process.exit(1);
+}
 
 const connector = createAuraKeeperConnector({
   endpoint,
@@ -21,15 +24,6 @@ const connector = createAuraKeeperConnector({
       source: "examples/node",
     },
   },
-  transport: useMockTransport
-    ? function mockTransport(config) {
-        console.log("AuraKeeper node example payload", config.payload);
-        return {
-          status: 202,
-          mocked: true,
-        };
-      }
-    : undefined,
 });
 
 connector.install();
@@ -75,11 +69,7 @@ process.on("SIGTERM", function onSigterm() {
 
 runExampleJob()
   .then(function onComplete() {
-    console.log(
-      useMockTransport
-        ? "Handled example error captured with mock transport."
-        : "Handled example error sent to AuraKeeper."
-    );
+    console.log("Handled example error sent to AuraKeeper.");
     return connector.flush();
   })
   .then(function onFlushed() {
