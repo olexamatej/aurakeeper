@@ -126,6 +126,13 @@ error fields, stack traces, arbitrary context, and request or user metadata.
 - [`examples`](./examples): runnable multi-language demo projects
 - [`openapi.yaml`](./openapi.yaml): canonical API contract
 
+## Contributors
+
+- [JosefKuchar](https://github.com/JosefKuchar)
+- [olexamatej](https://github.com/olexamatej)
+- [Padi142](https://github.com/Padi142)
+- [S1ro1](https://github.com/S1ro1)
+
 ## Local Development
 
 Run the full local app from the repository root:
