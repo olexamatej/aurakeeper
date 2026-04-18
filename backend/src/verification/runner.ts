@@ -7,15 +7,18 @@ import { selectExecutionBackend } from "./orchestrator";
 import { loadProjectVerificationConfig } from "./project-config";
 import { selectTechnologyProfile } from "./profiles";
 import {
-  applyWorkerPatch,
+  applyPatchToCheckout,
   cleanupWorkspace,
   createArtifactsDir,
+  materializeWorkerPatch,
+  normalizeChangedFiles,
   prepareWorkspace,
 } from "./workspace";
 import type {
   CommandPhase,
   CommandResult,
   ProjectVerificationConfig,
+  RepairPatchPromotionMode,
   VerificationCommand,
   VerificationRunReport,
   VerificationRunRequest,
@@ -274,7 +277,9 @@ ${commands || "- none"}
 `;
 }
 
-async function writeReports(report: VerificationRunReport): Promise<void> {
+export async function writeVerificationReports(
+  report: VerificationRunReport
+): Promise<void> {
   if (!report.artifactsDir) {
     return;
   }
@@ -293,6 +298,8 @@ function baseReport(input: {
   artifactsDir: string;
   suites: VerificationSuite[];
 }): VerificationRunReport {
+  const promotionMode: RepairPatchPromotionMode = input.request.promotionMode ?? "auto";
+
   return {
     repairAttemptId: input.request.repairAttemptId,
     status: "blocked",
@@ -305,6 +312,9 @@ function baseReport(input: {
     commands: [],
     artifactsDir: input.artifactsDir,
     patchApplied: false,
+    promotionMode,
+    sourceCheckoutPath: resolve(input.request.repository.checkoutPath),
+    sourcePatchStatus: "not_requested",
     startedAt: input.startedAt,
     finishedAt: input.finishedAt,
   };
@@ -366,14 +376,25 @@ export async function runVerification(
       failureReason: selection.reason,
     };
 
-    await writeReports(report);
+    await writeVerificationReports(report);
     return report;
   }
 
+  const patch = await materializeWorkerPatch({
+    sourcePath: sourceRoot,
+    artifactsDir,
+    patch: request.patch,
+    patchFile: request.patchFile,
+  });
   const profile = await selectTechnologyProfile(sourceRoot, config.profiles);
-  const changedFiles = request.changedFiles?.length
-    ? request.changedFiles
-    : changedFilesFromPatch(request.patch);
+  const normalizedChangedFiles = request.changedFiles?.length
+    ? await normalizeChangedFiles(sourceRoot, request.changedFiles)
+    : [];
+  const changedFiles = normalizedChangedFiles.length
+    ? normalizedChangedFiles
+    : patch?.changedFiles.length
+      ? patch.changedFiles
+      : changedFilesFromPatch(request.patch);
   const profileCommands = await profile.buildCommands({
     rootPath: sourceRoot,
     changedFiles,
@@ -394,9 +415,23 @@ export async function runVerification(
     artifactsDir,
   });
   let patchApplied = false;
+  const patchFiles = patch
+    ? {
+        workspace: "worker.workspace.patch",
+        original: "worker.original.patch",
+      }
+    : undefined;
+  const sourcePatchStatusForVerification: VerificationRunReport["sourcePatchStatus"] =
+    request.promotionMode === "manual" ? "pending_manual" : "not_requested";
 
   try {
-    const patchResult = await applyWorkerPatch(workspace, request);
+    const patchResult = patch
+      ? await applyPatchToCheckout({
+          checkoutPath: workspace.workspacePath,
+          patchFile: patch.workspacePatchFile,
+          timeoutMs: workspace.config.limits?.commandTimeoutMs ?? 60_000,
+        })
+      : { applied: false as const };
     patchApplied = patchResult.applied;
 
     if (patchResult.error) {
@@ -414,10 +449,12 @@ export async function runVerification(
         profileId: profile.id,
         workspacePath: workspace.workspacePath,
         patchApplied,
+        patchFiles,
+        sourcePatchStatus: sourcePatchStatusForVerification,
         failureReason: patchResult.error,
       };
 
-      await writeReports(report);
+      await writeVerificationReports(report);
       return report;
     }
 
@@ -446,6 +483,8 @@ export async function runVerification(
 
   const status = statusFromResults(commandResults);
   const finishedAt = new Date().toISOString();
+  const sourcePatchStatus: VerificationRunReport["sourcePatchStatus"] =
+    status.status === "passed" ? sourcePatchStatusForVerification : "not_requested";
   const report: VerificationRunReport = {
     repairAttemptId: request.repairAttemptId,
     status: status.status,
@@ -461,11 +500,15 @@ export async function runVerification(
     artifactsDir,
     workspacePath: workspace.workspacePath,
     patchApplied,
+    patchFiles,
+    promotionMode: request.promotionMode ?? "auto",
+    sourceCheckoutPath: sourceRoot,
+    sourcePatchStatus,
     failureReason: status.failureReason,
     startedAt,
     finishedAt,
   };
 
-  await writeReports(report);
+  await writeVerificationReports(report);
   return report;
 }

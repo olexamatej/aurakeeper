@@ -94,6 +94,7 @@ export type ProjectRepairSettings = {
   environment?: "production" | "hosted" | "local" | "development";
   trustLevel?: "trusted" | "untrusted";
   autoTrigger?: boolean;
+  promotionMode?: "auto" | "manual";
 };
 
 export type CreateRepairAttemptRequest = {
@@ -334,6 +335,7 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
       "environment",
       "trustLevel",
       "autoTrigger",
+      "promotionMode",
     ],
     "repair"
   );
@@ -345,6 +347,7 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
   const environment = getOptionalNonEmptyString(value, "environment", "repair");
   const trustLevel = getOptionalNonEmptyString(value, "trustLevel", "repair");
   const autoTrigger = getOptionalBoolean(value, "autoTrigger", "repair");
+  const promotionMode = getOptionalNonEmptyString(value, "promotionMode", "repair");
 
   if (backend && backend !== "docker" && backend !== "local" && backend !== "auto") {
     throw new ApiError(
@@ -376,6 +379,14 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
     );
   }
 
+  if (promotionMode && promotionMode !== "auto" && promotionMode !== "manual") {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "repair.promotionMode must be one of: auto, manual"
+    );
+  }
+
   return {
     checkoutPath,
     repositoryUrl,
@@ -384,6 +395,7 @@ function parseProjectRepairSettings(value: unknown): ProjectRepairSettings | und
     environment: environment as ProjectRepairSettings["environment"] | undefined,
     trustLevel: trustLevel as ProjectRepairSettings["trustLevel"] | undefined,
     autoTrigger,
+    promotionMode: promotionMode as ProjectRepairSettings["promotionMode"] | undefined,
   };
 }
 

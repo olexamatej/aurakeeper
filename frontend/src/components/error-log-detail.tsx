@@ -4,7 +4,12 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { fetchArtifact, listRepairAttempts, startRepairAttempt } from "@/lib/api"
+import {
+  applyRepairAttemptPatch,
+  fetchArtifact,
+  listRepairAttempts,
+  startRepairAttempt,
+} from "@/lib/api"
 import type { ErrorLog, StoredProject } from "@/lib/types"
 
 interface ErrorLogDetailProps {
@@ -57,6 +62,21 @@ function formatTime(iso: string): string {
   }
 }
 
+function sourcePatchStatusLabel(
+  status: "not_requested" | "pending_manual" | "applied" | "failed",
+): string {
+  switch (status) {
+    case "pending_manual":
+      return "Awaiting manual apply"
+    case "applied":
+      return "Applied to original checkout"
+    case "failed":
+      return "Apply to original checkout failed"
+    default:
+      return "Not applied to original checkout"
+  }
+}
+
 export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
   const queryClient = useQueryClient()
   const [issueSummary, setIssueSummary] = useState("")
@@ -82,6 +102,25 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
     },
     onError: (error: Error) => {
       toast.error("Failed to start repair", {
+        description: error.message,
+      })
+    },
+  })
+  const applyPatchMutation = useMutation({
+    mutationFn: (repairAttemptId: string) =>
+      applyRepairAttemptPatch(project.token, log.id, repairAttemptId),
+    onSuccess: (attempt) => {
+      toast.success("Verified patch applied", {
+        description:
+          attempt.sourcePatchStatus === "applied"
+            ? "AuraKeeper applied the verified patch back to the original checkout."
+            : "AuraKeeper updated the repair attempt status.",
+      })
+      void queryClient.invalidateQueries({ queryKey: ["errorLogs", project.id] })
+      void queryClient.invalidateQueries({ queryKey: ["repairAttempts", project.id, log.id] })
+    },
+    onError: (error: Error) => {
+      toast.error("Failed to apply verified patch", {
         description: error.message,
       })
     },
@@ -127,6 +166,9 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
                   <p className="text-xs text-muted-foreground">
                     Target repo: {project.repair?.checkoutPath}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Verified patch apply: {project.repair?.promotionMode === "manual" ? "Manual" : "Auto"}
+                  </p>
                 </div>
                 <Button
                   size="sm"
@@ -162,6 +204,41 @@ export function ErrorLogDetail({ log, project }: ErrorLogDetailProps) {
                       </div>
                       {attempt.failureReason ? (
                         <p className="mt-2 text-sm text-muted-foreground break-all whitespace-pre-wrap">{attempt.failureReason}</p>
+                      ) : null}
+                      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                        <p>
+                          Verified patch apply mode: {attempt.promotionMode === "manual" ? "Manual" : "Auto"}
+                        </p>
+                        <p>{sourcePatchStatusLabel(attempt.sourcePatchStatus)}</p>
+                        {attempt.sourcePatchAppliedAt ? (
+                          <p>Applied at: {formatTime(attempt.sourcePatchAppliedAt)}</p>
+                        ) : null}
+                        {attempt.sourcePatchError ? (
+                          <p className="break-all whitespace-pre-wrap">
+                            Apply error: {attempt.sourcePatchError}
+                          </p>
+                        ) : null}
+                        {attempt.targetCheckoutPath ? (
+                          <p className="break-all">Original checkout: {attempt.targetCheckoutPath}</p>
+                        ) : null}
+                      </div>
+                      {attempt.prGate === "allow" &&
+                      attempt.status === "passed" &&
+                      attempt.sourcePatchStatus !== "applied" ? (
+                        <div className="mt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => applyPatchMutation.mutate(attempt.id)}
+                            disabled={applyPatchMutation.isPending}
+                          >
+                            {applyPatchMutation.isPending
+                              ? "Applying..."
+                              : attempt.sourcePatchStatus === "failed"
+                                ? "Retry Apply to Original Checkout"
+                                : "Apply Verified Patch"}
+                          </Button>
+                        </div>
                       ) : null}
                       {attempt.artifacts.length > 0 ? (
                         <div className="mt-3 flex flex-wrap gap-2">

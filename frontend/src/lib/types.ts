@@ -30,6 +30,7 @@ export interface ProjectRepairSettings {
   backend?: "auto" | "docker" | "local"
   environment?: "production" | "hosted" | "local" | "development"
   trustLevel?: "trusted" | "untrusted"
+  promotionMode?: "auto" | "manual"
   autoTrigger?: boolean
 }
 
@@ -125,6 +126,11 @@ export interface RepairAttempt {
   stage: string
   selectedBackend?: string
   profileId?: string
+  targetCheckoutPath?: string
+  promotionMode: "auto" | "manual"
+  sourcePatchStatus: "not_requested" | "pending_manual" | "applied" | "failed"
+  sourcePatchAppliedAt?: string
+  sourcePatchError?: string
   failureReason?: string
   startedAt: string
   finishedAt: string

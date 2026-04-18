@@ -35,12 +35,19 @@ agents through a `browser` block, for example:
     "roles": ["replicator", "tester"],
     "command": "agent-browser",
     "targetUrl": "http://127.0.0.1:3000",
-    "startupCommand": "pnpm dev",
+    "startupCommand": "pnpm dev -- --hostname 127.0.0.1",
     "startupCwd": "frontend",
     "allowedDomains": ["127.0.0.1", "localhost"]
   }
 }
 ```
+
+Install `agent-browser` on the machine running the repair agents with
+`npm install -g agent-browser` or `brew install agent-browser`, then run
+`agent-browser install` once to download Chromium. AuraKeeper now treats
+`agent-browser` as a shell CLI, verifies the configured command is available
+before advertising browser automation to the agents, and passes explicit CLI
+workflow guidance in the task prompt.
 
 When a browser-facing error is detected, the orchestrator passes this capability
 to those agents and keeps the patched verification workspace alive long enough

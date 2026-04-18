@@ -27,6 +27,9 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
   const [open, setOpen] = useState(false)
   const [name, setName] = useState(project?.name ?? "")
   const [checkoutPath, setCheckoutPath] = useState(project?.repair?.checkoutPath ?? "")
+  const [promotionMode, setPromotionMode] = useState<"auto" | "manual">(
+    project?.repair?.promotionMode ?? "auto",
+  )
   const [autoTrigger, setAutoTrigger] = useState(project?.repair?.autoTrigger ?? true)
   const isEditing = Boolean(project)
 
@@ -34,6 +37,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
     mutationFn: (input: {
       name: string
       checkoutPath?: string
+      promotionMode: "auto" | "manual"
       autoTrigger: boolean
     }) =>
       isEditing && project
@@ -47,6 +51,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
                   trustLevel: project.repair?.trustLevel ?? "trusted",
                   repositoryUrl: project.repair?.repositoryUrl,
                   baseCommit: project.repair?.baseCommit,
+                  promotionMode: input.promotionMode,
                   autoTrigger: input.autoTrigger,
                 }
               : null,
@@ -59,6 +64,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
                   backend: "local",
                   environment: "local",
                   trustLevel: "trusted",
+                  promotionMode: input.promotionMode,
                   autoTrigger: input.autoTrigger,
                 }
               : undefined,
@@ -69,6 +75,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
       setOpen(false)
       setName(project.name)
       setCheckoutPath(project.repair?.checkoutPath ?? "")
+      setPromotionMode(project.repair?.promotionMode ?? "auto")
       setAutoTrigger(project.repair?.autoTrigger ?? true)
       toast.success(
         isEditing ? `Project "${project.name}" updated` : `Project "${project.name}" created`,
@@ -90,6 +97,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
     if (!nextOpen) {
       setName(project?.name ?? "")
       setCheckoutPath(project?.repair?.checkoutPath ?? "")
+      setPromotionMode(project?.repair?.promotionMode ?? "auto")
       setAutoTrigger(project?.repair?.autoTrigger ?? true)
     }
     setOpen(nextOpen)
@@ -103,6 +111,7 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
     mutation.mutate({
       name: trimmed,
       checkoutPath: trimmedCheckoutPath || undefined,
+      promotionMode,
       autoTrigger,
     })
   }
@@ -155,6 +164,23 @@ export function CreateProjectDialog({ onCreated, project }: CreateProjectDialogP
               />
               <p className="mt-1 text-xs text-muted-foreground">
                 Optional. Add a local repo path if AuraKeeper should be able to run fix agents for this project.
+              </p>
+            </div>
+
+            <div className="mt-4">
+              <Label htmlFor="project-promotion-mode">Verified patch apply mode</Label>
+              <select
+                id="project-promotion-mode"
+                value={promotionMode}
+                onChange={(e) => setPromotionMode(e.target.value as "auto" | "manual")}
+                disabled={mutation.isPending || !checkoutPath.trim()}
+                className="mt-2 flex h-10 w-full rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="auto">Auto apply after verify</option>
+                <option value="manual">Manual apply after verify</option>
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Auto applies the verified patch back to the original checkout. Manual keeps the verified patch ready for a later click.
               </p>
             </div>
 

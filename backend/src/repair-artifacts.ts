@@ -1,10 +1,11 @@
-import { cp, mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, relative, resolve } from "node:path";
 
 import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { config } from "./config";
 import { db } from "./db";
+import { updateErrorLogState } from "./error-logs";
 import { errorLogs, repairArtifacts, repairAttempts } from "./schema";
 import {
   orchestrateRepair,
@@ -13,6 +14,7 @@ import {
   type RepairOrchestrationReport,
   type RepairOrchestrationRequest,
 } from "./verification/orchestrator";
+import { applyPatchToCheckout } from "./verification/workspace";
 
 type PersistRepairArtifactsInput = {
   errorLogId: string;
@@ -40,6 +42,11 @@ export type StoredRepairAttempt = {
   stage: string;
   selectedBackend?: string;
   profileId?: string;
+  targetCheckoutPath?: string;
+  promotionMode: "auto" | "manual";
+  sourcePatchStatus: "not_requested" | "pending_manual" | "applied" | "failed";
+  sourcePatchAppliedAt?: string;
+  sourcePatchError?: string;
   failureReason?: string;
   startedAt: string;
   finishedAt: string;
@@ -129,6 +136,30 @@ function artifactUrl(errorLogId: string, artifactId: string): string {
   return `/v1/logs/errors/${errorLogId}/artifacts/${artifactId}`;
 }
 
+async function patchAttemptReports(
+  attempt: typeof repairAttempts.$inferSelect,
+  mutate: (report: RepairOrchestrationReport) => RepairOrchestrationReport
+): Promise<void> {
+  const orchestratorReportPath = join(attempt.artifactsDir, "orchestrator-report.json");
+
+  try {
+    const report = JSON.parse(await readFile(orchestratorReportPath, "utf8")) as RepairOrchestrationReport;
+    const nextReport = mutate(report);
+
+    await writeFile(orchestratorReportPath, `${JSON.stringify(nextReport, null, 2)}\n`);
+
+    if (nextReport.verification) {
+      const verificationReportPath = join(attempt.artifactsDir, "verification-report.json");
+      await writeFile(
+        verificationReportPath,
+        `${JSON.stringify(nextReport.verification, null, 2)}\n`
+      );
+    }
+  } catch {
+    // Keep the persisted attempt status authoritative even if legacy artifacts are missing.
+  }
+}
+
 export async function persistRepairArtifactsForErrorLog(
   input: PersistRepairArtifactsInput
 ): Promise<StoredRepairAttempt> {
@@ -172,6 +203,11 @@ export async function persistRepairArtifactsForErrorLog(
       selectedBackend: input.report.selectedBackend,
       profileId: input.report.profileId,
       artifactsDir: persistentDir,
+      targetCheckoutPath: input.report.verification?.sourceCheckoutPath ?? null,
+      promotionMode: input.report.verification?.promotionMode ?? "auto",
+      sourcePatchStatus: input.report.verification?.sourcePatchStatus ?? "not_requested",
+      sourcePatchAppliedAt: input.report.verification?.sourcePatchAppliedAt ?? null,
+      sourcePatchError: input.report.verification?.sourcePatchError ?? null,
       failureReason: input.report.failureReason,
       startedAt: input.report.startedAt,
       finishedAt: input.report.finishedAt,
@@ -225,6 +261,13 @@ export async function persistRepairArtifactsForErrorLog(
     stage: input.report.stage,
     selectedBackend: input.report.selectedBackend,
     profileId: input.report.profileId,
+    targetCheckoutPath: input.report.verification?.sourceCheckoutPath ?? undefined,
+    promotionMode: (input.report.verification?.promotionMode ?? "auto") as "auto" | "manual",
+    sourcePatchStatus: (
+      input.report.verification?.sourcePatchStatus ?? "not_requested"
+    ) as StoredRepairAttempt["sourcePatchStatus"],
+    sourcePatchAppliedAt: input.report.verification?.sourcePatchAppliedAt ?? undefined,
+    sourcePatchError: input.report.verification?.sourcePatchError ?? undefined,
     failureReason: input.report.failureReason,
     startedAt: input.report.startedAt,
     finishedAt: input.report.finishedAt,
@@ -292,6 +335,13 @@ export function listRepairAttemptsForErrorLog(
     stage: attempt.stage,
     selectedBackend: attempt.selectedBackend ?? undefined,
     profileId: attempt.profileId ?? undefined,
+    targetCheckoutPath: attempt.targetCheckoutPath ?? undefined,
+    promotionMode: (attempt.promotionMode ?? "auto") as "auto" | "manual",
+    sourcePatchStatus: (
+      attempt.sourcePatchStatus ?? "not_requested"
+    ) as StoredRepairAttempt["sourcePatchStatus"],
+    sourcePatchAppliedAt: attempt.sourcePatchAppliedAt ?? undefined,
+    sourcePatchError: attempt.sourcePatchError ?? undefined,
     failureReason: attempt.failureReason ?? undefined,
     startedAt: attempt.startedAt,
     finishedAt: attempt.finishedAt,
@@ -310,6 +360,108 @@ export function listRepairAttemptsForErrorLog(
         url: artifactUrl(errorLogId, artifact.id),
       })),
   }));
+}
+
+export function getRepairAttemptForErrorLog(
+  projectId: string,
+  errorLogId: string,
+  repairAttemptId: string
+): (typeof repairAttempts.$inferSelect) | undefined {
+  return db
+    .select()
+    .from(repairAttempts)
+    .where(
+      and(
+        eq(repairAttempts.id, repairAttemptId),
+        eq(repairAttempts.projectId, projectId),
+        eq(repairAttempts.errorLogId, errorLogId)
+      )
+    )
+    .get();
+}
+
+export async function applyStoredRepairAttemptPatch(input: {
+  projectId: string;
+  errorLogId: string;
+  repairAttemptId: string;
+}): Promise<StoredRepairAttempt> {
+  const attempt = getRepairAttemptForErrorLog(
+    input.projectId,
+    input.errorLogId,
+    input.repairAttemptId
+  );
+
+  if (!attempt) {
+    throw new Error(`Repair attempt '${input.repairAttemptId}' was not found.`);
+  }
+
+  if (attempt.prGate !== "allow" || attempt.status !== "passed") {
+    throw new Error("Only verified repair attempts can be applied to the original checkout.");
+  }
+
+  if (!attempt.targetCheckoutPath) {
+    throw new Error("Repair attempt is missing its original checkout path.");
+  }
+
+  if (attempt.sourcePatchStatus === "applied") {
+    const existing = listRepairAttemptsForErrorLog(input.projectId, input.errorLogId).find(
+      (candidate) => candidate.id === input.repairAttemptId
+    );
+
+    if (!existing) {
+      throw new Error(`Repair attempt '${input.repairAttemptId}' was not found.`);
+    }
+
+    return existing;
+  }
+
+  const patchFile = join(attempt.artifactsDir, "worker.original.patch");
+  updateErrorLogState(input.errorLogId, "deploy_started");
+
+  const patchResult = await applyPatchToCheckout({
+    checkoutPath: attempt.targetCheckoutPath,
+    patchFile,
+    timeoutMs: 60_000,
+  });
+
+  const appliedAt = patchResult.applied ? new Date().toISOString() : null;
+  const sourcePatchStatus = patchResult.applied ? "applied" : "failed";
+  const sourcePatchError = patchResult.applied
+    ? null
+    : patchResult.error ?? "Failed to apply the verified patch to the original checkout.";
+
+  db.update(repairAttempts)
+    .set({
+      sourcePatchStatus,
+      sourcePatchAppliedAt: appliedAt,
+      sourcePatchError,
+    })
+    .where(eq(repairAttempts.id, attempt.id))
+    .run();
+
+  await patchAttemptReports(attempt, (report) => ({
+    ...report,
+    verification: report.verification
+      ? {
+          ...report.verification,
+          sourcePatchStatus,
+          sourcePatchAppliedAt: appliedAt ?? undefined,
+          sourcePatchError: sourcePatchError ?? undefined,
+        }
+      : report.verification,
+  }));
+
+  updateErrorLogState(input.errorLogId, patchResult.applied ? "deploy_succeeded" : "deploy_failed");
+
+  const updated = listRepairAttemptsForErrorLog(input.projectId, input.errorLogId).find(
+    (candidate) => candidate.id === input.repairAttemptId
+  );
+
+  if (!updated) {
+    throw new Error(`Repair attempt '${input.repairAttemptId}' was not found.`);
+  }
+
+  return updated;
 }
 
 export function getRepairArtifactForErrorLog(

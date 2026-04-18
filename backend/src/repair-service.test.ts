@@ -125,6 +125,7 @@ describe("repair coordination", () => {
           repairBackend: "local",
           repairEnvironment: "local",
           repairTrustLevel: "trusted",
+          repairPromotionMode: "manual",
           repairAutoTrigger: true,
           createdAt: new Date().toISOString(),
         })
@@ -171,15 +172,21 @@ describe("repair coordination", () => {
 
       expect(attempts).toHaveLength(1);
 
-      const logsResponse = await app.handle(
-        new Request("http://localhost:3000/v1/logs/errors", {
-          headers: {
-            "X-API-Token": projectToken,
-          },
-        })
+      const storedLog = await waitFor(
+        async () => {
+          const logsResponse = await app.handle(
+            new Request("http://localhost:3000/v1/logs/errors", {
+              headers: {
+                "X-API-Token": projectToken,
+              },
+            })
+          );
+          const logs = await logsResponse.json() as Array<{ id: string; state: string }>;
+
+          return logs.find((entry) => entry.id === accepted.id);
+        },
+        (value) => value?.state === "verify_succeeded"
       );
-      const logs = await logsResponse.json() as Array<{ id: string; state: string }>;
-      const storedLog = logs.find((entry) => entry.id === accepted.id);
 
       expect(storedLog?.state).toBe("verify_succeeded");
     } finally {
@@ -244,6 +251,7 @@ describe("repair coordination", () => {
           repairBackend: "local",
           repairEnvironment: "local",
           repairTrustLevel: "trusted",
+          repairPromotionMode: "manual",
           repairAutoTrigger: false,
           createdAt: new Date().toISOString(),
         })

@@ -21,10 +21,12 @@ replicated, and what most likely caused it.
 
 1. Inspect the supplied error and identify the most likely failing code path.
 2. Run the smallest useful command needed to reproduce or confirm the failure.
-   When browser automation is supplied, prefer `agent-browser` for UI flows:
-   open the target page, snapshot for refs, interact using refs, then re-snapshot
-   and save at least the required screenshot files into the supplied
-   `screenshotDir`.
+   When browser automation is supplied, prefer `agent-browser` for UI flows.
+   The browser capability is provided as a shell command in
+   `task.capabilities.browser.command`, not as a built-in Codex tool. Run that
+   command directly to open the target page, snapshot for refs, interact using
+   refs, then re-snapshot and save at least the required screenshot files into
+   the supplied `screenshotDir`.
 3. Capture the exact command, output, exit code, and relevant environment notes.
 4. Narrow the issue to a clear cause when the evidence supports it.
 5. Write a short handoff file for the Worker Agent.

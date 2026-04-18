@@ -10,6 +10,7 @@ import { errorLogs, projects } from "./schema";
 import {
   CodexCliAgentClient,
   type RepairAgentClient,
+  type RepairOrchestrationReport,
 } from "./verification";
 import { ApiError, type IssueState } from "./validation";
 
@@ -43,6 +44,7 @@ export type ActiveRepairStatus = {
     | "worker"
     | "verification"
     | "tester"
+    | "promotion"
     | "complete";
   state: IssueState;
   detail: string;
@@ -52,24 +54,33 @@ export type ActiveRepairStatus = {
   profileId?: string;
 };
 
-function finalStateFromReportStage(input: {
-  stage: string;
-  status: string;
-}): IssueState {
-  if (input.stage === "complete") {
-    return input.status === "passed" ? "verify_succeeded" : "verify_failed";
+function finalStateFromReportStage(report: RepairOrchestrationReport): IssueState {
+  if (report.stage === "complete") {
+    if (report.status !== "passed") {
+      return report.verification?.sourcePatchStatus === "failed"
+        ? "deploy_failed"
+        : "verify_failed";
+    }
+
+    return report.verification?.sourcePatchStatus === "applied"
+      ? "deploy_succeeded"
+      : "verify_succeeded";
   }
 
   if (
-    input.stage === "backend_selection" ||
-    input.stage === "context" ||
-    input.stage === "replicator"
+    report.stage === "backend_selection" ||
+    report.stage === "context" ||
+    report.stage === "replicator"
   ) {
     return "repro_failed";
   }
 
-  if (input.stage === "worker") {
+  if (report.stage === "worker") {
     return "fix_failed";
+  }
+
+  if (report.stage === "promotion") {
+    return "deploy_failed";
   }
 
   return "verify_failed";
@@ -113,6 +124,8 @@ function buildRepairRequest(
         | null) ?? undefined,
     trustLevel:
       (project.repairTrustLevel as "trusted" | "untrusted" | null) ?? undefined,
+    promotionMode:
+      (project.repairPromotionMode as "auto" | "manual" | null) ?? "auto",
   };
 }
 
@@ -129,6 +142,8 @@ function stateFromActiveStage(
     case "verification":
     case "tester":
       return "verify_started";
+    case "promotion":
+      return "deploy_started";
     case "complete":
       return "verify_succeeded";
   }
@@ -167,7 +182,7 @@ export class RepairCoordinator {
     this.activeStatuses.set(errorLog.id, {
       running: true,
       logId: errorLog.id,
-      repairAttemptId: request.repairAttemptId ?? `pending_${errorLog.id}`,
+      repairAttemptId: `pending_${errorLog.id}`,
       stage: "replicator",
       state: "repro_started",
       detail: "Repair queued and waiting to start the replicator.",
@@ -206,13 +221,7 @@ export class RepairCoordinator {
       }
     )
       .then(({ report }) => {
-        updateErrorLogState(
-          errorLog.id,
-          finalStateFromReportStage({
-            stage: report.stage,
-            status: report.status,
-          })
-        );
+        updateErrorLogState(errorLog.id, finalStateFromReportStage(report));
       })
       .catch((error: unknown) => {
         console.error(error);

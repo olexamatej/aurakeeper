@@ -4,6 +4,12 @@ export type VerificationSuite = "targeted" | "standard" | "fuzz" | "full";
 export type VerificationStatus = "passed" | "failed" | "blocked" | "inconclusive";
 export type TrustLevel = "trusted" | "untrusted";
 export type VerificationEnvironment = "production" | "hosted" | "local" | "development";
+export type RepairPatchPromotionMode = "auto" | "manual";
+export type RepairPatchPromotionStatus =
+  | "not_requested"
+  | "pending_manual"
+  | "applied"
+  | "failed";
 export type CommandPhase = "setup" | VerificationSuite;
 export type CommandSource = "profile" | "config" | "replicator";
 export type CommandNetworkMode = "enabled" | "disabled";
@@ -176,6 +182,7 @@ export type VerificationRunRequest = {
   backend?: ExecutionBackendPreference;
   environment?: VerificationEnvironment;
   trustLevel?: TrustLevel;
+  promotionMode?: RepairPatchPromotionMode;
   config?: ProjectVerificationConfig;
   artifactsDir?: string;
   keepWorkspace?: boolean;
@@ -211,6 +218,15 @@ export type VerificationRunReport = {
   artifactsDir?: string;
   workspacePath?: string;
   patchApplied: boolean;
+  patchFiles?: {
+    workspace: string;
+    original: string;
+  };
+  promotionMode: RepairPatchPromotionMode;
+  sourceCheckoutPath: string;
+  sourcePatchStatus: RepairPatchPromotionStatus;
+  sourcePatchAppliedAt?: string;
+  sourcePatchError?: string;
   failureReason?: string;
   startedAt: string;
   finishedAt: string;

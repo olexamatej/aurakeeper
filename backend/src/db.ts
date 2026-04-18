@@ -29,6 +29,7 @@ sqlite.exec(`
     repair_backend TEXT,
     repair_environment TEXT,
     repair_trust_level TEXT,
+    repair_promotion_mode TEXT NOT NULL DEFAULT 'auto',
     repair_auto_trigger INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
@@ -108,6 +109,11 @@ sqlite.exec(`
     selected_backend TEXT,
     profile_id TEXT,
     artifacts_dir TEXT NOT NULL,
+    target_checkout_path TEXT,
+    promotion_mode TEXT NOT NULL DEFAULT 'auto',
+    source_patch_status TEXT NOT NULL DEFAULT 'not_requested',
+    source_patch_applied_at TEXT,
+    source_patch_error TEXT,
     failure_reason TEXT,
     started_at TEXT NOT NULL,
     finished_at TEXT NOT NULL,
@@ -183,6 +189,36 @@ if (!hasColumn("projects", "repair_auto_trigger")) {
   sqlite.exec(
     "ALTER TABLE projects ADD COLUMN repair_auto_trigger INTEGER NOT NULL DEFAULT 0;"
   );
+}
+
+if (!hasColumn("projects", "repair_promotion_mode")) {
+  sqlite.exec(
+    "ALTER TABLE projects ADD COLUMN repair_promotion_mode TEXT NOT NULL DEFAULT 'auto';"
+  );
+}
+
+if (!hasColumn("repair_attempts", "target_checkout_path")) {
+  sqlite.exec("ALTER TABLE repair_attempts ADD COLUMN target_checkout_path TEXT;");
+}
+
+if (!hasColumn("repair_attempts", "promotion_mode")) {
+  sqlite.exec(
+    "ALTER TABLE repair_attempts ADD COLUMN promotion_mode TEXT NOT NULL DEFAULT 'auto';"
+  );
+}
+
+if (!hasColumn("repair_attempts", "source_patch_status")) {
+  sqlite.exec(
+    "ALTER TABLE repair_attempts ADD COLUMN source_patch_status TEXT NOT NULL DEFAULT 'not_requested';"
+  );
+}
+
+if (!hasColumn("repair_attempts", "source_patch_applied_at")) {
+  sqlite.exec("ALTER TABLE repair_attempts ADD COLUMN source_patch_applied_at TEXT;");
+}
+
+if (!hasColumn("repair_attempts", "source_patch_error")) {
+  sqlite.exec("ALTER TABLE repair_attempts ADD COLUMN source_patch_error TEXT;");
 }
 
 sqlite.exec(`

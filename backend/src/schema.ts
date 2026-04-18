@@ -12,6 +12,7 @@ export const projects = sqliteTable(
     repairBackend: text("repair_backend"),
     repairEnvironment: text("repair_environment"),
     repairTrustLevel: text("repair_trust_level"),
+    repairPromotionMode: text("repair_promotion_mode").default("auto").notNull(),
     repairAutoTrigger: integer("repair_auto_trigger", { mode: "boolean" })
       .default(false)
       .notNull(),
@@ -105,6 +106,11 @@ export const repairAttempts = sqliteTable(
     selectedBackend: text("selected_backend"),
     profileId: text("profile_id"),
     artifactsDir: text("artifacts_dir").notNull(),
+    targetCheckoutPath: text("target_checkout_path"),
+    promotionMode: text("promotion_mode").default("auto").notNull(),
+    sourcePatchStatus: text("source_patch_status").default("not_requested").notNull(),
+    sourcePatchAppliedAt: text("source_patch_applied_at"),
+    sourcePatchError: text("source_patch_error"),
     failureReason: text("failure_reason"),
     startedAt: text("started_at").notNull(),
     finishedAt: text("finished_at").notNull(),
