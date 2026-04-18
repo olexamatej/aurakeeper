@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AuraKeeper Browser Example</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "Segoe UI", sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px 20px;
+        background: #f4f7fb;
+        color: #132238;
+      }
+
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px;
+        background: #ffffff;
+        border: 1px solid #d6e0ea;
+        border-radius: 16px;
+        box-shadow: 0 18px 40px rgba(19, 34, 56, 0.08);
+      }
+
+      h1 {
+        margin-top: 0;
+      }
+
+      p {
+        line-height: 1.5;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 24px 0;
+      }
+
+      button {
+        padding: 12px 16px;
+        border: 0;
+        border-radius: 10px;
+        background: #0f6ad8;
+        color: #ffffff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: #2e4a66;
+      }
+
+      code,
+      pre {
+        font-family: "SFMono-Regular", monospace;
+      }
+
+      pre {
+        padding: 16px;
+        background: #0f1c2c;
+        color: #d9e7ff;
+        border-radius: 12px;
+        overflow-x: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>AuraKeeper Browser Example</h1>
+      <p>
+        Replace the placeholder endpoint and API token in <code>app.js</code>,
+        then use the buttons below to emit example events.
+      </p>
+
+      <div class="actions">
+        <button id="capture-handled">Capture handled error</button>
+        <button id="trigger-rejection" class="secondary">
+          Trigger unhandled rejection
+        </button>
+      </div>
+
+      <p>
+        The installed connector instance is exposed as
+        <code>window.browserAuraKeeper</code> for debugging.
+      </p>
+
+      <pre><code id="status">Connector not initialized.</code></pre>
+    </main>
+
+    <script src="../../aurakeeper.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "@aurakeeper/javascript-connector",
+  "version": "0.1.0",
+  "description": "Generic JavaScript connector for sending application errors to AuraKeeper.",
+  "main": "./aurakeeper.js",
+  "type": "commonjs",
+  "license": "UNLICENSED"
+}
