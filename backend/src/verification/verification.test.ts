@@ -448,6 +448,225 @@ describe("repair orchestration", () => {
     }
   });
 
+  test("rebuilds the worker patch from checkout edits when the returned diff is malformed", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-source-"));
+    const artifactsDir = await createArtifactsDir();
+    const malformedPatch = `diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1,2 +1,2 @@
+ old
+-buggy
++fixed
+`;
+    const agentClient: RepairAgentClient = {
+      async run<TInput, TOutput>(
+        task: AgentTask<TInput>
+      ): Promise<AgentResult<TOutput>> {
+        if (task.role === "replicator") {
+          const output: ReplicatorAgentOutput = {
+            status: "reproduced",
+            handoff: "value.txt still contains buggy",
+            tldr: "value is stale",
+            likelyCause: "value.txt was never updated",
+            reproductionCommands: ['test "$(cat value.txt)" = "fixed"'],
+          };
+
+          return { output: output as TOutput };
+        }
+
+        if (task.role === "worker") {
+          await writeFile(join(task.repository.checkoutPath, "value.txt"), "fixed\n");
+
+          const output: WorkerAgentOutput = {
+            status: "patched",
+            issueSummary: "replace buggy value",
+            suspectedRootCause: "value.txt contains the buggy value",
+            filesChanged: ["value.txt"],
+            locChanged: 1,
+            patch: malformedPatch,
+          };
+
+          return { output: output as TOutput };
+        }
+
+        const input = task.input as TesterAgentInput;
+        const output: TesterAgentOutput = {
+          status: input.verificationReport.status,
+          prGate: input.verificationReport.prGate,
+          originalIssueVerification: "targeted command passed after patch",
+          regressionSummary: "configured checks passed",
+          commandsReviewed: input.verificationReport.commands.map((command) => command.id),
+          skippedSuites: input.verificationReport.suitesSkipped,
+          artifactsReviewed: [input.verificationReport.artifactsDir ?? ""],
+          confidence: "high",
+        };
+
+        return { output: output as TOutput };
+      },
+    };
+
+    try {
+      await writeFile(join(sourcePath, "value.txt"), "buggy\n");
+
+      const report = await orchestrateRepair(
+        {
+          repairAttemptId: "attempt_orchestrator_malformed_patch",
+          repository: {
+            checkoutPath: sourcePath,
+          },
+          error: {
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "backend",
+            service: {
+              name: "fixture",
+            },
+            source: {
+              runtime: "node",
+              language: "javascript",
+            },
+            error: {
+              message: "expected fixed value",
+              stack: "Error: expected fixed value\n    at readValue (value.txt:1:1)",
+            },
+          },
+          backend: "local",
+          environment: "local",
+          trustLevel: "trusted",
+          suites: ["targeted"],
+          config: {
+            commands: {
+              targeted: ['test "$(cat value.txt)" = "fixed"'],
+            },
+          },
+          artifactsDir,
+          keepWorkspace: true,
+          dockerAvailable: false,
+        },
+        agentClient
+      );
+
+      expect(report.status).toBe("passed");
+      expect(report.verification?.patchApplied).toBe(true);
+      expect(report.verification?.failureReason).toBeUndefined();
+      expect(report.verification?.patchFiles?.workspace).toBe("worker.workspace.patch");
+
+      const workspacePatch = await readFile(join(artifactsDir, "worker.workspace.patch"), "utf8");
+      expect(workspacePatch).toContain("diff --git a/value.txt b/value.txt");
+      expect(workspacePatch).toContain("@@ -1 +1 @@");
+      expect(workspacePatch).toContain("-buggy");
+      expect(workspacePatch).toContain("+fixed");
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+      await rm(artifactsDir, { recursive: true, force: true });
+    }
+  });
+
+  test("rewrites replicator reproduction commands to the patched workspace", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-source-"));
+    const artifactsDir = await createArtifactsDir();
+    const patch = `diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-old
++new
+`;
+    const agentClient: RepairAgentClient = {
+      async run<TInput, TOutput>(
+        task: AgentTask<TInput>
+      ): Promise<AgentResult<TOutput>> {
+        if (task.role === "replicator") {
+          const output: ReplicatorAgentOutput = {
+            status: "reproduced",
+            handoff: "value.txt still contains old",
+            tldr: "value is stale",
+            likelyCause: "constant was not updated",
+            reproductionCommands: [`cd ${sourcePath} && test "$(cat value.txt)" = "new"`],
+          };
+
+          return { output: output as TOutput };
+        }
+
+        if (task.role === "worker") {
+          const output: WorkerAgentOutput = {
+            status: "patched",
+            issueSummary: "replace stale value",
+            suspectedRootCause: "value.txt contains the old value",
+            filesChanged: ["value.txt"],
+            locChanged: 1,
+            patch,
+          };
+
+          return { output: output as TOutput };
+        }
+
+        const input = task.input as TesterAgentInput;
+        const output: TesterAgentOutput = {
+          status: input.verificationReport.status,
+          prGate: input.verificationReport.prGate,
+          originalIssueVerification: "targeted command passed after patch",
+          regressionSummary: "configured checks passed",
+          commandsReviewed: input.verificationReport.commands.map((command) => command.id),
+          skippedSuites: input.verificationReport.suitesSkipped,
+          artifactsReviewed: [input.verificationReport.artifactsDir ?? ""],
+          confidence: "high",
+        };
+
+        return { output: output as TOutput };
+      },
+    };
+
+    try {
+      await writeFile(join(sourcePath, "value.txt"), "old\n");
+
+      const report = await orchestrateRepair(
+        {
+          repairAttemptId: "attempt_orchestrator_rewrite_replicator_paths",
+          repository: {
+            checkoutPath: sourcePath,
+          },
+          error: {
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "backend",
+            service: {
+              name: "fixture",
+            },
+            source: {
+              runtime: "node",
+              language: "javascript",
+            },
+            error: {
+              message: "expected new value",
+              stack: "Error: expected new value\n    at readValue (value.txt:1:1)",
+            },
+          },
+          backend: "local",
+          environment: "local",
+          trustLevel: "trusted",
+          suites: ["targeted"],
+          artifactsDir,
+          keepWorkspace: true,
+          dockerAvailable: false,
+        },
+        agentClient
+      );
+
+      expect(report.status).toBe("passed");
+      expect(report.verification?.patchApplied).toBe(true);
+      expect(report.verification?.commands[0]?.command).toContain(
+        report.verification?.workspacePath ?? ""
+      );
+      expect(report.verification?.commands[0]?.command).not.toContain(sourcePath);
+      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("new\n");
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+      await rm(artifactsDir, { recursive: true, force: true });
+    }
+  });
+
   test("keeps worker and tester edits out of the source checkout until manual apply", async () => {
     const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-orchestrator-isolated-"));
     const artifactsDir = await createArtifactsDir();

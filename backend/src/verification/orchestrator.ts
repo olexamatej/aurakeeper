@@ -13,6 +13,7 @@ import {
   cleanupWorkspace,
   createArtifactsDir,
   prepareWorkspace,
+  renderPatchFromCheckoutChanges,
 } from "./workspace";
 import type {
   BackendSelectionDecision,
@@ -1479,6 +1480,19 @@ export async function orchestrateRepair(
         replicator: agents.replicator.output,
       },
     });
+
+    if (agents.worker.output?.status === "patched") {
+      const renderedPatch = await renderPatchFromCheckoutChanges({
+        sourcePath: sourceRoot,
+        modifiedPath: workerWorkspace.workspacePath,
+        changedFiles: agents.worker.output.filesChanged,
+      });
+
+      if (renderedPatch.patch) {
+        agents.worker.output.patch = renderedPatch.patch;
+        agents.worker.output.filesChanged = renderedPatch.changedFiles;
+      }
+    }
   } finally {
     await cleanupWorkspace(workerWorkspace);
   }

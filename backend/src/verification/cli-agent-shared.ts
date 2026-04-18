@@ -217,9 +217,10 @@ export function buildRepairAgentPrompt<TInput>(
   const workerPatchNotes = task.role === "worker"
     ? [
         "Worker Patch Notes:",
-        "- The `patch` field must be a unified diff that `git apply` can consume.",
-        "- Do not return an `apply_patch` block or any prose in the `patch` field.",
-        "- Start the patch with `diff --git a/... b/...`.",
+        "- The `patch` field may be either a Codex `*** Begin Patch` block or a unified diff that `git apply` can consume.",
+        "- Prefer the Codex `*** Begin Patch` format when possible; AuraKeeper canonicalizes it before verification.",
+        "- Do not include prose in the `patch` field.",
+        "- If you return a unified diff, start it with `diff --git a/... b/...`.",
         "",
       ]
     : [];

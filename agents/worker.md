@@ -35,8 +35,11 @@ amount of LOC changed.
 - Do not change public contracts unless the error proves the contract is wrong.
 - Do not edit unrelated files to satisfy style preferences.
 - If no safe minimal fix is available, report why instead of guessing.
-- The `patch` field must be a unified diff that `git apply` can consume.
-  Do not return an `apply_patch` block in the `patch` field.
+- The `patch` field may be either a Codex `*** Begin Patch` block or a unified
+  diff that `git apply` can consume.
+- Prefer the Codex `*** Begin Patch` format when possible because AuraKeeper
+  canonicalizes it before verification.
+- Do not include prose in the `patch` field.
 
 ## Output
 

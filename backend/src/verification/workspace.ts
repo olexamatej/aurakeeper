@@ -156,6 +156,11 @@ export type MaterializedWorkerPatch = {
   changedFiles: string[];
 };
 
+export type RenderedCheckoutPatch = {
+  patch?: string;
+  changedFiles: string[];
+};
+
 function changedFilesFromPatch(patch: string): string[] {
   const files = patch
     .split(/\r?\n/)
@@ -533,6 +538,85 @@ export async function materializeWorkerPatch(input: {
     originalPatchFile,
     changedFiles: changedFilesFromPatch(workspacePatch),
   };
+}
+
+export async function renderPatchFromCheckoutChanges(input: {
+  sourcePath: string;
+  modifiedPath: string;
+  changedFiles?: string[];
+}): Promise<RenderedCheckoutPatch> {
+  const normalizedChangedFiles = await normalizeChangedFiles(
+    input.modifiedPath,
+    input.changedFiles
+  );
+
+  if (normalizedChangedFiles.length === 0) {
+    return {
+      patch: undefined,
+      changedFiles: [],
+    };
+  }
+
+  const tempRoot = await mkdtemp(join(tmpdir(), "aurakeeper-rendered-worker-patch-"));
+  const originalRoot = join(tempRoot, "original");
+  const modifiedRoot = join(tempRoot, "modified");
+  const renderedDiffs: string[] = [];
+  const actualChangedFiles: string[] = [];
+
+  try {
+    await mkdir(originalRoot, { recursive: true });
+    await mkdir(modifiedRoot, { recursive: true });
+
+    for (const filePath of normalizedChangedFiles) {
+      const sourceFile = resolve(input.sourcePath, filePath);
+      const modifiedFile = resolve(input.modifiedPath, filePath);
+      const sourceExists = await pathExists(sourceFile);
+      const modifiedExists = await pathExists(modifiedFile);
+
+      if (!sourceExists && !modifiedExists) {
+        continue;
+      }
+
+      const oldTempPath = join(originalRoot, filePath);
+      const newTempPath = join(modifiedRoot, filePath);
+
+      await mkdir(dirname(oldTempPath), { recursive: true });
+      await mkdir(dirname(newTempPath), { recursive: true });
+
+      if (sourceExists) {
+        await writeFile(oldTempPath, await readFile(sourceFile, "utf8"));
+      } else {
+        await writeFile(oldTempPath, "");
+      }
+
+      if (modifiedExists) {
+        await writeFile(newTempPath, await readFile(modifiedFile, "utf8"));
+      } else {
+        await writeFile(newTempPath, "");
+      }
+
+      const diffBody = await runDiffCommand(
+        sourceExists ? `a/${filePath}` : "/dev/null",
+        oldTempPath,
+        modifiedExists ? `b/${filePath}` : "/dev/null",
+        newTempPath
+      );
+
+      if (diffBody.trim().length === 0) {
+        continue;
+      }
+
+      renderedDiffs.push(`diff --git a/${filePath} b/${filePath}\n${diffBody}`);
+      actualChangedFiles.push(filePath);
+    }
+
+    return {
+      patch: renderedDiffs.length > 0 ? renderedDiffs.join("") : undefined,
+      changedFiles: actualChangedFiles,
+    };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 }
 
 export async function createArtifactsDir(artifactsDir?: string): Promise<string> {

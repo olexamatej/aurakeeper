@@ -204,13 +204,17 @@ describe("CodexCliAgentClient", () => {
     });
   });
 
-  test("tells the worker to return a git-applicable unified diff", async () => {
+  test("tells the worker to prefer Codex apply_patch output", async () => {
     const client = new CodexCliAgentClient({
       codexPath: "/mock/codex",
       runner: async ({ args, stdin }) => {
-        expect(stdin).toContain("The `patch` field must be a unified diff");
-        expect(stdin).toContain("Do not return an `apply_patch` block");
-        expect(stdin).toContain("Start the patch with `diff --git a/... b/...`");
+        expect(stdin).toContain(
+          "The `patch` field may be either a Codex `*** Begin Patch` block"
+        );
+        expect(stdin).toContain("Prefer the Codex `*** Begin Patch` format");
+        expect(stdin).toContain(
+          "If you return a unified diff, start it with `diff --git a/... b/...`"
+        );
 
         const outputPath = args[args.indexOf("--output-last-message") + 1] as string;
 

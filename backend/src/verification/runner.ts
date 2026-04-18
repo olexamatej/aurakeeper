@@ -122,6 +122,18 @@ function changedFilesFromPatch(patch: string | undefined): string[] {
   return files.filter((filePath, index) => files.indexOf(filePath) === index);
 }
 
+function rewriteCommandPathVariants(
+  command: string,
+  sourceRoot: string,
+  workspaceRoot: string
+): string {
+  if (!sourceRoot || sourceRoot === workspaceRoot || !command.includes(sourceRoot)) {
+    return command;
+  }
+
+  return command.split(sourceRoot).join(workspaceRoot);
+}
+
 function replicatorCommands(request: VerificationRunRequest): VerificationCommand[] {
   return (request.replicator?.reproductionCommands ?? []).map((entry, index) => ({
     id: `replicator:targeted:${index + 1}`,
@@ -458,7 +470,19 @@ export async function runVerification(
       return report;
     }
 
-    for (const command of commands) {
+    const commandsForWorkspace = commands.map((command) => ({
+      ...command,
+      command:
+        command.source === "replicator"
+          ? rewriteCommandPathVariants(
+              command.command,
+              sourceRoot,
+              workspace.workspacePath
+            )
+          : command.command,
+    }));
+
+    for (const command of commandsForWorkspace) {
       if (!isAllowedCommand(command, config)) {
         commandResults.push(
           createSkippedResult(command, "Command is not allowed by project policy.")
