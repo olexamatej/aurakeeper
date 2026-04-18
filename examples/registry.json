@@ -4,6 +4,7 @@
     "name": "JavaScript",
     "description": "Node.js runtime error captured by the generic JavaScript connector.",
     "cwd": ".",
+    "requiredCommands": ["node"],
     "command": ["node", "connectors/javascript/examples/node/index.js"],
     "timeoutMs": 10000,
     "successExitCodes": [0, 1]
@@ -13,6 +14,7 @@
     "name": "CLI",
     "description": "Uncaught CLI process crash captured by the CLI connector.",
     "cwd": ".",
+    "requiredCommands": ["node"],
     "command": ["node", "connectors/cli/examples/uncaught.js"],
     "timeoutMs": 10000,
     "successExitCodes": [0, 1]
@@ -22,6 +24,7 @@
     "name": "Python",
     "description": "Uncaught Python runtime error captured by sys.excepthook.",
     "cwd": ".",
+    "requiredCommands": ["python3"],
     "command": ["python3", "connectors/python/examples/standalone/main.py"],
     "timeoutMs": 10000,
     "successExitCodes": [0, 1]
@@ -31,6 +34,7 @@
     "name": "Ruby",
     "description": "Uncaught Ruby runtime error captured by the at_exit hook.",
     "cwd": ".",
+    "requiredCommands": ["ruby"],
     "command": ["ruby", "-I", "connectors/ruby/lib", "connectors/ruby/examples/standalone/main.rb"],
     "timeoutMs": 10000,
     "successExitCodes": [0, 1]
@@ -40,6 +44,7 @@
     "name": "PHP",
     "description": "Uncaught PHP exception captured by the connector exception handler.",
     "cwd": ".",
+    "requiredCommands": ["php"],
     "command": ["php", "connectors/php/examples/runtime-error.php"],
     "timeoutMs": 10000,
     "successExitCodes": [0, 255]
@@ -49,6 +54,7 @@
     "name": "JVM",
     "description": "Java runtime error captured by the JVM uncaught exception handler.",
     "cwd": ".",
+    "requiredCommands": ["mvn", "javac", "java"],
     "command": ["bash", "connectors/jvm/examples/standalone/run.sh"],
     "timeoutMs": 30000,
     "successExitCodes": [0, 1]
@@ -58,6 +64,7 @@
     "name": ".NET",
     "description": ".NET console runtime error captured by AppDomain hooks.",
     "cwd": ".",
+    "requiredCommands": ["dotnet"],
     "command": ["dotnet", "run", "--project", "connectors/dotnet/examples/ConsoleApp/ConsoleApp.csproj"],
     "timeoutMs": 30000,
     "successExitCodes": [0, 134]
@@ -67,9 +74,11 @@
     "name": "Go",
     "description": "net/http panic captured by AuraKeeper Go middleware.",
     "cwd": "connectors/go",
+    "requiredCommands": ["go"],
     "command": ["go", "run", "./examples/http"],
     "triggerUrl": "http://127.0.0.1:8080/panic",
     "readyDelayMs": 1500,
+    "triggerTimeoutMs": 30000,
     "timeoutMs": 30000,
     "successExitCodes": [0, 1]
   },
@@ -78,6 +87,8 @@
     "name": "Next.js",
     "description": "App Router route error captured by the Next.js connector.",
     "cwd": "connectors/nextjs/examples/app-router",
+    "requiredCommands": ["npm"],
+    "setupCommand": ["npm", "install", "--no-audit", "--no-fund", "--no-package-lock", "--silent"],
     "command": ["npm", "run", "dev", "--", "--hostname", "127.0.0.1", "--port", "3001"],
     "triggerUrl": "http://127.0.0.1:3001/api/demo?fail=1",
     "readyDelayMs": 4000,
@@ -89,6 +100,8 @@
     "name": "React Native",
     "description": "Expo app with a button that triggers an unhandled JavaScript error.",
     "cwd": "connectors/react-native/examples/basic",
+    "requiredCommands": ["npm"],
+    "setupCommand": ["npm", "install", "--no-audit", "--no-fund", "--no-package-lock", "--silent"],
     "command": ["npm", "run", "start", "--", "--localhost"],
     "readyDelayMs": 2000,
     "timeoutMs": 45000,
