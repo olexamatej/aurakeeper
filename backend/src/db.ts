@@ -35,6 +35,7 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS error_logs (
     id TEXT PRIMARY KEY NOT NULL,
     project_id TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL DEFAULT 'new_error',
     event_id TEXT,
     occurred_at TEXT NOT NULL,
     received_at TEXT NOT NULL,
@@ -73,9 +74,16 @@ if (!hasColumn("error_logs", "project_id")) {
   sqlite.exec("ALTER TABLE error_logs ADD COLUMN project_id TEXT NOT NULL DEFAULT '';");
 }
 
+if (!hasColumn("error_logs", "state")) {
+  sqlite.exec("ALTER TABLE error_logs ADD COLUMN state TEXT NOT NULL DEFAULT 'new_error';");
+}
+
 sqlite.exec(`
   CREATE INDEX IF NOT EXISTS error_logs_project_id_idx
     ON error_logs (project_id);
+
+  CREATE INDEX IF NOT EXISTS error_logs_state_idx
+    ON error_logs (state);
 `);
 
 export const sqliteDb = sqlite;

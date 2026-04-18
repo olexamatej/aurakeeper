@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "bun --watch run src/index.ts",
     "start": "bun run src/index.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "test": "bun test",
+    "verify": "bun run src/verification/cli.ts"
   },
   "dependencies": {
     "@elysiajs/openapi": "^1.4.14",

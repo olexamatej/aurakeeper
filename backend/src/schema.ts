@@ -19,6 +19,7 @@ export const errorLogs = sqliteTable(
   {
     id: text("id").primaryKey(),
     projectId: text("project_id").notNull(),
+    state: text("state").default("new_error").notNull(),
     eventId: text("event_id"),
     occurredAt: text("occurred_at").notNull(),
     receivedAt: text("received_at").notNull(),
@@ -44,6 +45,7 @@ export const errorLogs = sqliteTable(
   },
   (table) => ({
     projectIdIdx: index("error_logs_project_id_idx").on(table.projectId),
+    stateIdx: index("error_logs_state_idx").on(table.state),
     eventIdIdx: index("error_logs_event_id_idx").on(table.eventId),
     occurredAtIdx: index("error_logs_occurred_at_idx").on(table.occurredAt),
     serviceNameIdx: index("error_logs_service_name_idx").on(table.serviceName),
