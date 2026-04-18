@@ -140,7 +140,8 @@ Current command surface:
 - `aurakeeper local` checks whether the current project already has an
   AuraKeeper hook, offers to install it when missing, starts the local backend,
   provisions a project token that auto-triggers local repairs, and can forward
-  those credentials into a dev command such as `aurakeeper local -- npm run dev`.
+  those credentials into the project `.env` and a dev command such as
+  `aurakeeper local -- npm run dev`.
 
 ## Connector Examples
 
