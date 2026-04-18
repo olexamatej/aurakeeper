@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type {
+  BrowserAutomationRole,
   ExecutionBackendId,
   ExecutionBackendPreference,
   ProjectVerificationConfig,
@@ -16,6 +17,7 @@ const BACKEND_PREFERENCES = new Set(["docker", "local", "auto"]);
 const SUITES = new Set(["targeted", "standard", "fuzz", "full"]);
 const TRUST_LEVELS = new Set(["trusted", "untrusted"]);
 const ENVIRONMENTS = new Set(["production", "hosted", "local", "development"]);
+const BROWSER_ROLES = new Set(["replicator", "tester"]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -75,6 +77,14 @@ function asEnvironment(value: unknown): VerificationEnvironment | undefined {
   return typeof value === "string" && ENVIRONMENTS.has(value)
     ? (value as VerificationEnvironment)
     : undefined;
+}
+
+function asBrowserRoles(value: unknown): BrowserAutomationRole[] | undefined {
+  const entries = asStringArray(value)?.filter((entry): entry is BrowserAutomationRole =>
+    BROWSER_ROLES.has(entry)
+  );
+
+  return entries && entries.length > 0 ? entries : undefined;
 }
 
 function parseScalar(value: string): unknown {
@@ -259,12 +269,32 @@ export function normalizeProjectVerificationConfig(
       }
     : undefined;
 
+  const browser = isObject(value.browser)
+    ? {
+        enabled: asBoolean(value.browser.enabled),
+        roles: asBrowserRoles(value.browser.roles),
+        command: asString(value.browser.command),
+        configPath: asString(value.browser.configPath),
+        remoteProvider: asString(value.browser.remoteProvider),
+        headed: asBoolean(value.browser.headed),
+        sessionName: asString(value.browser.sessionName),
+        startupCommand: asString(value.browser.startupCommand),
+        startupCwd: asString(value.browser.startupCwd),
+        startupTimeoutMs: asNumber(value.browser.startupTimeoutMs),
+        targetUrl: asString(value.browser.targetUrl),
+        healthcheckUrl: asString(value.browser.healthcheckUrl),
+        waitForUrl: asString(value.browser.waitForUrl),
+        allowedDomains: asStringArray(value.browser.allowedDomains),
+      }
+    : undefined;
+
   return {
     execution,
     profiles: asStringArray(value.profiles),
     projectRoots: asStringArray(value.projectRoots),
     suites: asSuiteArray(value.suites),
     commands: normalizeCommands(value.commands),
+    browser,
     allowedCommandPrefixes: asStringArray(value.allowedCommandPrefixes),
     allowedPaths: asStringArray(value.allowedPaths),
     limits,

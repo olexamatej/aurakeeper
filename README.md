@@ -65,7 +65,9 @@ The Orchestrator is the deterministic controller around those agents. It gathers
 repository context, project instructions, OpenAPI contracts, repair config, and
 stack-relevant files; chooses Docker or local execution from policy; calls the
 Replicator, Worker, and Tester agents in order; runs the verification runner on
-the Worker patch in an isolated workspace; and writes the final repair report.
+the Worker patch in an isolated workspace; exposes `agent-browser` capability to
+the Replicator and Tester for frontend bug reproduction and UI verification when
+the issue looks browser-facing; and writes the final repair report.
 The verification runner is the hard gate: if verification blocks the patch, the
 orchestrator must not allow the repair even if an agent says it is safe. The
 backend implementation lives in

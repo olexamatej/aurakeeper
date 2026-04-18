@@ -83,3 +83,51 @@ export const sentrySources = sqliteTable(
     ),
   })
 );
+
+export const repairAttempts = sqliteTable(
+  "repair_attempts",
+  {
+    id: text("id").primaryKey(),
+    errorLogId: text("error_log_id").notNull(),
+    projectId: text("project_id").notNull(),
+    status: text("status").notNull(),
+    prGate: text("pr_gate").notNull(),
+    stage: text("stage").notNull(),
+    selectedBackend: text("selected_backend"),
+    profileId: text("profile_id"),
+    artifactsDir: text("artifacts_dir").notNull(),
+    failureReason: text("failure_reason"),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => ({
+    errorLogIdIdx: index("repair_attempts_error_log_id_idx").on(table.errorLogId),
+    projectIdIdx: index("repair_attempts_project_id_idx").on(table.projectId),
+    createdAtIdx: index("repair_attempts_created_at_idx").on(table.createdAt),
+  })
+);
+
+export const repairArtifacts = sqliteTable(
+  "repair_artifacts",
+  {
+    id: text("id").primaryKey(),
+    repairAttemptId: text("repair_attempt_id").notNull(),
+    errorLogId: text("error_log_id").notNull(),
+    projectId: text("project_id").notNull(),
+    kind: text("kind").notNull(),
+    fileName: text("file_name").notNull(),
+    relativePath: text("relative_path").notNull(),
+    absolutePath: text("absolute_path").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => ({
+    repairAttemptIdIdx: index("repair_artifacts_repair_attempt_id_idx").on(
+      table.repairAttemptId
+    ),
+    errorLogIdIdx: index("repair_artifacts_error_log_id_idx").on(table.errorLogId),
+    projectIdIdx: index("repair_artifacts_project_id_idx").on(table.projectId),
+  })
+);

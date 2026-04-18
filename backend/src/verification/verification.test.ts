@@ -15,6 +15,7 @@ import {
   type WorkerAgentOutput,
 } from "./orchestrator";
 import { nodeProfile } from "./profiles";
+import { normalizeProjectVerificationConfig } from "./project-config";
 import { applyWorkerPatch, cleanupWorkspace, createArtifactsDir, prepareWorkspace } from "./workspace";
 
 describe("execution backend selection", () => {
@@ -112,6 +113,46 @@ describe("technology profiles", () => {
     } finally {
       await rm(rootPath, { recursive: true, force: true });
     }
+  });
+});
+
+describe("project verification config", () => {
+  test("normalizes browser automation settings", () => {
+    const config = normalizeProjectVerificationConfig({
+      browser: {
+        enabled: true,
+        roles: ["replicator", "tester", "worker"],
+        command: "agent-browser",
+        configPath: "config/agent-browser.json",
+        remoteProvider: "browserbase",
+        headed: true,
+        sessionName: "frontend-bug",
+        startupCommand: "pnpm dev",
+        startupCwd: "frontend",
+        startupTimeoutMs: 45_000,
+        targetUrl: "http://127.0.0.1:3000/dashboard",
+        healthcheckUrl: "http://127.0.0.1:3000/api/health",
+        waitForUrl: "**/dashboard",
+        allowedDomains: ["127.0.0.1", "localhost"],
+      },
+    });
+
+    expect(config.browser).toEqual({
+      enabled: true,
+      roles: ["replicator", "tester"],
+      command: "agent-browser",
+      configPath: "config/agent-browser.json",
+      remoteProvider: "browserbase",
+      headed: true,
+      sessionName: "frontend-bug",
+      startupCommand: "pnpm dev",
+      startupCwd: "frontend",
+      startupTimeoutMs: 45_000,
+      targetUrl: "http://127.0.0.1:3000/dashboard",
+      healthcheckUrl: "http://127.0.0.1:3000/api/health",
+      waitForUrl: "**/dashboard",
+      allowedDomains: ["127.0.0.1", "localhost"],
+    });
   });
 });
 
@@ -275,6 +316,149 @@ describe("repair orchestration", () => {
       expect(report.stage).toBe("complete");
       expect(report.verification?.patchApplied).toBe(true);
       expect(report.codebaseContextPath).toBeTruthy();
+      expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
+    } finally {
+      await rm(sourcePath, { recursive: true, force: true });
+      await rm(artifactsDir, { recursive: true, force: true });
+    }
+  });
+
+  test("passes agent-browser capability to replicator and tester for frontend bugs", async () => {
+    const sourcePath = await mkdtemp(join(tmpdir(), "aurakeeper-browser-orchestrator-source-"));
+    const artifactsDir = await createArtifactsDir();
+    const calls: string[] = [];
+    const patch = `diff --git a/value.txt b/value.txt
+--- a/value.txt
++++ b/value.txt
+@@ -1 +1 @@
+-old
++new
+`;
+    let testerWorkspaceValue = "";
+
+    const agentClient: RepairAgentClient = {
+      async run<TInput, TOutput>(
+        task: AgentTask<TInput>
+      ): Promise<AgentResult<TOutput>> {
+        calls.push(task.role);
+
+        if (task.role === "replicator") {
+          expect(task.capabilities?.browser).toMatchObject({
+            provider: "agent-browser",
+            command: "agent-browser",
+            targetUrl: "http://127.0.0.1:3000/dashboard",
+            workspacePath: sourcePath,
+            screenshotDir: artifactsDir,
+            requiredScreenshots: ["replicator-browser-current.png"],
+          });
+
+          const output: ReplicatorAgentOutput = {
+            status: "reproduced",
+            handoff: "dashboard shows stale value",
+            tldr: "dashboard UI is stale",
+            likelyCause: "frontend still renders the old value",
+            reproductionCommands: ['test "$(cat value.txt)" = "new"'],
+          };
+
+          return { output: output as TOutput };
+        }
+
+        if (task.role === "worker") {
+          const output: WorkerAgentOutput = {
+            status: "patched",
+            issueSummary: "replace stale value",
+            suspectedRootCause: "value.txt contains the old value",
+            filesChanged: ["value.txt"],
+            locChanged: 1,
+            patch,
+          };
+
+          return { output: output as TOutput };
+        }
+
+        expect(task.capabilities?.browser).toBeTruthy();
+        expect(task.capabilities?.browser).toMatchObject({
+          screenshotDir: artifactsDir,
+          requiredScreenshots: [
+            "tester-browser-before-fix.png",
+            "tester-browser-after-fix.png",
+          ],
+        });
+        testerWorkspaceValue = await readFile(
+          join(task.capabilities?.browser?.workspacePath as string, "value.txt"),
+          "utf8"
+        );
+
+        const input = task.input as TesterAgentInput;
+        const output: TesterAgentOutput = {
+          status: input.verificationReport.status,
+          prGate: input.verificationReport.prGate,
+          originalIssueVerification: "browser verification can inspect the patched workspace",
+          regressionSummary: "configured checks passed",
+          commandsReviewed: input.verificationReport.commands.map((command) => command.id),
+          skippedSuites: input.verificationReport.suitesSkipped,
+          artifactsReviewed: [input.verificationReport.artifactsDir ?? ""],
+          confidence: "high",
+        };
+
+        return { output: output as TOutput };
+      },
+    };
+
+    try {
+      await writeFile(join(sourcePath, "value.txt"), "old\n");
+
+      const report = await orchestrateRepair(
+        {
+          repairAttemptId: "attempt_browser_orchestrator_test",
+          repository: {
+            checkoutPath: sourcePath,
+          },
+          error: {
+            occurredAt: "2026-04-18T08:32:17Z",
+            level: "error",
+            platform: "web",
+            service: {
+              name: "fixture",
+            },
+            source: {
+              runtime: "browser",
+              language: "typescript",
+              framework: "react",
+            },
+            error: {
+              message: "dashboard shows stale value",
+            },
+            context: {
+              request: {
+                url: "http://127.0.0.1:3000/dashboard",
+              },
+            },
+          },
+          backend: "local",
+          environment: "local",
+          trustLevel: "trusted",
+          dockerAvailable: false,
+          suites: ["targeted"],
+          artifactsDir,
+          config: {
+            profiles: ["generic"],
+            commands: {
+              targeted: ['test "$(cat value.txt)" = "new"'],
+            },
+            browser: {
+              enabled: true,
+              targetUrl: "http://127.0.0.1:3000/dashboard",
+            },
+          },
+        },
+        agentClient
+      );
+
+      expect(calls).toEqual(["replicator", "worker", "tester"]);
+      expect(report.status).toBe("passed");
+      expect(report.prGate).toBe("allow");
+      expect(testerWorkspaceValue).toBe("new\n");
       expect(await readFile(join(sourcePath, "value.txt"), "utf8")).toBe("old\n");
     } finally {
       await rm(sourcePath, { recursive: true, force: true });

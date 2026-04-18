@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +11,8 @@ import { createArtifactsDir } from "./workspace";
 import type {
   BackendSelectionDecision,
   BackendSelectionInput,
+  BrowserAutomationCapability,
+  BrowserAutomationRole,
   ExecutionBackendId,
   ExecutionBackendPreference,
   ProjectVerificationConfig,
@@ -61,6 +63,10 @@ const PROJECT_DOCUMENT_NAMES = new Set([
   "requirements.txt",
   "tsconfig.json",
 ]);
+const DEFAULT_BROWSER_ROLES: BrowserAutomationRole[] = ["replicator", "tester"];
+const FRONTEND_PLATFORMS = new Set(["web", "frontend", "browser"]);
+const FRONTEND_FRAMEWORK_HINTS = ["react", "next", "vue", "nuxt", "svelte", "angular", "remix"];
+const AGENT_BROWSER_DOCS_URL = "https://agent-browser.dev/";
 
 export type AgentRole = (typeof AGENT_ROLES)[number];
 export type StructuredErrorEvent = ErrorLogRequest | Record<string, unknown>;
@@ -120,6 +126,10 @@ export type SandboxPolicy = {
   suites: VerificationSuite[];
 };
 
+export type AgentCapabilities = {
+  browser?: BrowserAutomationCapability;
+};
+
 export type AgentTask<TInput> = {
   id: string;
   role: AgentRole;
@@ -128,6 +138,7 @@ export type AgentTask<TInput> = {
   repository: VerificationRunRequest["repository"];
   codebase: CodebaseContext;
   sandbox: SandboxPolicy;
+  capabilities?: AgentCapabilities;
   input: TInput;
   artifactsDir: string;
   createdAt: string;
@@ -398,6 +409,10 @@ function mergeProjectVerificationConfig(
       ...loadedConfig.commands,
       ...requestConfig?.commands,
     },
+    browser: {
+      ...loadedConfig.browser,
+      ...requestConfig?.browser,
+    },
     limits: {
       ...loadedConfig.limits,
       ...requestConfig?.limits,
@@ -411,6 +426,191 @@ function mergeProjectVerificationConfig(
       ...requestConfig?.local,
     },
   };
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function nestedString(value: unknown, path: string[]): string | undefined {
+  let current: unknown = value;
+
+  for (const key of path) {
+    if (!isRecord(current)) {
+      return undefined;
+    }
+
+    current = current[key];
+  }
+
+  return typeof current === "string" && current.length > 0 ? current : undefined;
+}
+
+function browserRoles(config: ProjectVerificationConfig): BrowserAutomationRole[] {
+  return config.browser?.roles?.filter((role, index, roles) => roles.indexOf(role) === index) ??
+    DEFAULT_BROWSER_ROLES;
+}
+
+function looksLikeFrontendError(error: StructuredErrorEvent): boolean {
+  const platform = nestedString(error, ["platform"])?.toLowerCase();
+
+  if (platform && FRONTEND_PLATFORMS.has(platform)) {
+    return true;
+  }
+
+  const framework = nestedString(error, ["source", "framework"])?.toLowerCase();
+
+  if (framework && FRONTEND_FRAMEWORK_HINTS.some((hint) => framework.includes(hint))) {
+    return true;
+  }
+
+  return Boolean(
+    nestedString(error, ["context", "request", "url"]) ||
+      nestedString(error, ["context", "request", "origin"]) ||
+      nestedString(error, ["error", "details", "url"])
+  );
+}
+
+function browserTargetUrl(
+  error: StructuredErrorEvent,
+  config: ProjectVerificationConfig
+): string | undefined {
+  const configured = config.browser?.targetUrl;
+
+  if (configured) {
+    return configured;
+  }
+
+  const candidates = [
+    nestedString(error, ["context", "request", "url"]),
+    nestedString(error, ["error", "details", "url"]),
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    try {
+      return new URL(candidate).toString();
+    } catch {
+      continue;
+    }
+  }
+
+  const origin = nestedString(error, ["context", "request", "origin"]);
+  const path = nestedString(error, ["context", "request", "path"]);
+
+  if (!origin || !path) {
+    return undefined;
+  }
+
+  try {
+    return new URL(path, origin).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function browserAllowedDomains(
+  targetUrl: string | undefined,
+  config: ProjectVerificationConfig
+): string[] | undefined {
+  if (config.browser?.allowedDomains?.length) {
+    return config.browser.allowedDomains;
+  }
+
+  if (!targetUrl) {
+    return undefined;
+  }
+
+  try {
+    return [new URL(targetUrl).hostname];
+  } catch {
+    return undefined;
+  }
+}
+
+async function browserConfigPath(
+  rootPath: string,
+  config: ProjectVerificationConfig
+): Promise<string | undefined> {
+  if (config.browser?.configPath) {
+    return resolve(rootPath, config.browser.configPath);
+  }
+
+  const discovered = resolve(rootPath, "agent-browser.json");
+
+  return (await pathExists(discovered)) ? discovered : undefined;
+}
+
+async function browserCapabilityForRole(input: {
+  role: BrowserAutomationRole;
+  rootPath: string;
+  workspacePath: string;
+  artifactsDir: string;
+  error: StructuredErrorEvent;
+  config: ProjectVerificationConfig;
+}): Promise<BrowserAutomationCapability | undefined> {
+  if (input.config.browser?.enabled === false) {
+    return undefined;
+  }
+
+  if (!browserRoles(input.config).includes(input.role)) {
+    return undefined;
+  }
+
+  if (!looksLikeFrontendError(input.error)) {
+    return undefined;
+  }
+
+  const targetUrl = browserTargetUrl(input.error, input.config);
+
+  return {
+    provider: "agent-browser",
+    command: input.config.browser?.command ?? "agent-browser",
+    docsUrl: AGENT_BROWSER_DOCS_URL,
+    configPath: await browserConfigPath(input.rootPath, input.config),
+    remoteProvider: input.config.browser?.remoteProvider,
+    headed: input.config.browser?.headed,
+    sessionName: input.config.browser?.sessionName,
+    startupCommand: input.config.browser?.startupCommand,
+    startupCwd: resolve(input.workspacePath, input.config.browser?.startupCwd ?? "."),
+    startupTimeoutMs: input.config.browser?.startupTimeoutMs,
+    targetUrl,
+    healthcheckUrl: input.config.browser?.healthcheckUrl,
+    waitForUrl: input.config.browser?.waitForUrl,
+    allowedDomains: browserAllowedDomains(targetUrl, input.config),
+    workspacePath: input.workspacePath,
+    screenshotDir: input.artifactsDir,
+    requiredScreenshots:
+      input.role === "replicator"
+        ? ["replicator-browser-current.png"]
+        : ["tester-browser-before-fix.png", "tester-browser-after-fix.png"],
+    recommendedWorkflow: [
+      "Start the frontend app if a startupCommand is provided, then wait until the app is reachable.",
+      "Open the target URL with agent-browser, snapshot with refs, interact using refs, and re-snapshot after each meaningful UI change.",
+      "Save the required screenshots into screenshotDir using the listed filenames so they are preserved with the run artifacts.",
+    ],
+  };
+}
+
+async function cleanupVerificationWorkspace(workspacePath: string | undefined): Promise<void> {
+  if (!workspacePath) {
+    return;
+  }
+
+  await rm(workspacePath, { recursive: true, force: true });
+  await rm(dirname(workspacePath), { recursive: true, force: true });
 }
 
 function normalizeRelativePath(filePath: string): string {
@@ -673,6 +873,7 @@ async function executeAgent<TInput, TOutput>(input: {
   repository: VerificationRunRequest["repository"];
   codebase: CodebaseContext;
   sandbox: SandboxPolicy;
+  capabilities?: AgentCapabilities;
   agentInput: TInput;
   artifactsDir: string;
   agentClient: RepairAgentClient;
@@ -687,6 +888,7 @@ async function executeAgent<TInput, TOutput>(input: {
     repository: input.repository,
     codebase: input.codebase,
     sandbox: input.sandbox,
+    capabilities: input.capabilities,
     input: input.agentInput,
     artifactsDir: input.artifactsDir,
     createdAt: startedAt,
@@ -923,6 +1125,24 @@ export async function orchestrateRepair(
     suites,
   };
   const agents: RepairOrchestrationReport["agents"] = {};
+  const replicatorBrowser = await browserCapabilityForRole({
+    role: "replicator",
+    rootPath: sourceRoot,
+    workspacePath: sourceRoot,
+    artifactsDir,
+    error: request.error,
+    config,
+  });
+  const testerUsesBrowser = Boolean(
+    await browserCapabilityForRole({
+      role: "tester",
+      rootPath: sourceRoot,
+      workspacePath: sourceRoot,
+      artifactsDir,
+      error: request.error,
+      config,
+    })
+  );
 
   agents.replicator = await executeAgent<ReplicatorAgentInput, ReplicatorAgentOutput>({
     role: "replicator",
@@ -931,6 +1151,7 @@ export async function orchestrateRepair(
     repository: request.repository,
     codebase,
     sandbox,
+    capabilities: replicatorBrowser ? { browser: replicatorBrowser } : undefined,
     artifactsDir,
     agentClient,
     agentInput: {
@@ -1046,6 +1267,10 @@ export async function orchestrateRepair(
   }
 
   const { runVerification } = await import("./runner");
+  const keepWorkspaceForTester =
+    testerUsesBrowser || request.keepWorkspace || config.local?.keepWorkspace || false;
+  const cleanupVerificationWorkspaceAfterTester =
+    testerUsesBrowser && !request.keepWorkspace && !config.local?.keepWorkspace;
   const verification = await runVerification({
     repairAttemptId,
     repository: request.repository,
@@ -1057,7 +1282,7 @@ export async function orchestrateRepair(
     trustLevel,
     config,
     artifactsDir,
-    keepWorkspace: request.keepWorkspace,
+    keepWorkspace: keepWorkspaceForTester,
     dockerAvailable,
     replicator: {
       handoff: agents.replicator.output.handoff,
@@ -1065,34 +1290,71 @@ export async function orchestrateRepair(
     },
   });
 
-  agents.tester = await executeAgent<TesterAgentInput, TesterAgentOutput>({
+  const testerBrowser = await browserCapabilityForRole({
     role: "tester",
-    prompt: prompts.tester,
-    repairAttemptId,
-    repository: request.repository,
-    codebase,
-    sandbox,
+    rootPath: sourceRoot,
+    workspacePath: verification.workspacePath ?? sourceRoot,
     artifactsDir,
-    agentClient,
-    agentInput: {
-      error: request.error,
-      issueSummary: request.issueSummary,
-      selectedBackend: selection.backend,
-      profileId: profile.id,
-      suites,
-      replicator: agents.replicator.output,
-      worker: agents.worker.output,
-      verificationReport: verification,
-    },
+    error: request.error,
+    config,
   });
 
-  if (agents.tester.error || !agents.tester.output) {
+  try {
+    agents.tester = await executeAgent<TesterAgentInput, TesterAgentOutput>({
+      role: "tester",
+      prompt: prompts.tester,
+      repairAttemptId,
+      repository: request.repository,
+      codebase,
+      sandbox,
+      capabilities: testerBrowser ? { browser: testerBrowser } : undefined,
+      artifactsDir,
+      agentClient,
+      agentInput: {
+        error: request.error,
+        issueSummary: request.issueSummary,
+        selectedBackend: selection.backend,
+        profileId: profile.id,
+        suites,
+        replicator: agents.replicator.output,
+        worker: agents.worker.output,
+        verificationReport: verification,
+      },
+    });
+
+    if (agents.tester.error || !agents.tester.output) {
+      return writeOrchestrationReport(
+        reportFromBase({
+          repairAttemptId,
+          status: verification.status,
+          prGate: verification.prGate,
+          stage: "tester",
+          selectedBackend: selection.backend,
+          backendReason: selection.reason,
+          backendFallback: selection.fallback,
+          profileId: profile.id,
+          suites,
+          artifactsDir,
+          codebaseContextPath,
+          agents,
+          verification,
+          startedAt,
+          failureReason:
+            agents.tester.error ??
+            verification.failureReason ??
+            "Tester did not return a usable result.",
+        })
+      );
+    }
+
+    const final = finalStatusFromTester(agents.tester.output, verification);
+
     return writeOrchestrationReport(
       reportFromBase({
         repairAttemptId,
-        status: verification.status,
-        prGate: verification.prGate,
-        stage: "tester",
+        status: final.status,
+        prGate: final.prGate,
+        stage: "complete",
         selectedBackend: selection.backend,
         backendReason: selection.reason,
         backendFallback: selection.fallback,
@@ -1103,31 +1365,12 @@ export async function orchestrateRepair(
         agents,
         verification,
         startedAt,
-        failureReason:
-          agents.tester.error ?? verification.failureReason ?? "Tester did not return a usable result.",
+        failureReason: final.failureReason ?? verification.failureReason,
       })
     );
+  } finally {
+    if (cleanupVerificationWorkspaceAfterTester) {
+      await cleanupVerificationWorkspace(verification.workspacePath);
+    }
   }
-
-  const final = finalStatusFromTester(agents.tester.output, verification);
-
-  return writeOrchestrationReport(
-    reportFromBase({
-      repairAttemptId,
-      status: final.status,
-      prGate: final.prGate,
-      stage: "complete",
-      selectedBackend: selection.backend,
-      backendReason: selection.reason,
-      backendFallback: selection.fallback,
-      profileId: profile.id,
-      suites,
-      artifactsDir,
-      codebaseContextPath,
-      agents,
-      verification,
-      startedAt,
-      failureReason: final.failureReason ?? verification.failureReason,
-    })
-  );
 }
