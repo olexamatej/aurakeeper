@@ -1,0 +1,347 @@
+openapi: 3.1.0
+info:
+  title: Error Logging API
+  version: 1.0.0
+  summary: Bearer-protected API for ingesting application errors from any platform.
+  description: >
+    A platform-agnostic error logging API that accepts structured error events from
+    web, backend, mobile, CLI, or worker runtimes. The payload is intentionally
+    flexible so callers can attach runtime-specific details from environments such
+    as Next.js, Python, Node.js, or other systems.
+
+servers:
+  - url: https://api.example.com
+    description: Production
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Error Logs
+    description: Submit structured error events.
+
+paths:
+  /v1/logs/errors:
+    post:
+      tags:
+        - Error Logs
+      operationId: createErrorLog
+      summary: Submit an error log event
+      description: >
+        Accepts a single error event with platform metadata, normalized error
+        attributes, and arbitrary structured details supplied by the client.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorLogRequest'
+            examples:
+              nextjs:
+                summary: Next.js application error
+                value:
+                  eventId: 767d5a66-2b41-4c2e-90e8-6dd0149491df
+                  occurredAt: "2026-04-18T08:32:17Z"
+                  level: error
+                  platform: web
+                  environment: production
+                  service:
+                    name: aura-web
+                    version: "2026.04.18"
+                  source:
+                    runtime: node
+                    language: typescript
+                    framework: next.js
+                    component: app-router
+                  error:
+                    type: TypeError
+                    message: Cannot read properties of undefined
+                    stack: "TypeError: Cannot read properties of undefined\n    at DashboardPage..."
+                    handled: false
+                    details:
+                      route: /dashboard
+                      digest: NEXT_APP_ERROR_01
+                      buildId: b42a9a1
+                  context:
+                    request:
+                      method: GET
+                      path: /dashboard
+                      requestId: req_123
+                    user:
+                      id: user_42
+                    tags:
+                      - frontend
+                      - nextjs
+              python:
+                summary: Python backend exception
+                value:
+                  eventId: b453b95e-0dbb-4b71-978d-f61dcb50adf9
+                  occurredAt: "2026-04-18T08:35:02Z"
+                  level: critical
+                  platform: backend
+                  environment: production
+                  service:
+                    name: aura-api
+                    version: "1.12.3"
+                  source:
+                    runtime: cpython
+                    language: python
+                    framework: fastapi
+                    component: billing-worker
+                  error:
+                    type: ValueError
+                    message: Invalid invoice state transition
+                    stack: "Traceback (most recent call last): ..."
+                    code: INVALID_STATE
+                    handled: true
+                    details:
+                      module: billing.jobs.reconcile
+                      exceptionClass: ValueError
+                      invoiceId: inv_987
+                      previousState: paid
+                      requestedState: refunded
+                  context:
+                    correlationId: corr_789
+                    tags:
+                      - backend
+                      - billing
+      responses:
+        '202':
+          description: Error log accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorLogAccepted'
+              example:
+                id: log_01HSV6M2KQ4T1TA7R8P8W9J1BM
+                status: accepted
+                receivedAt: "2026-04-18T08:32:18Z"
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid_request
+                message: occurredAt must be a valid RFC 3339 timestamp
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: unauthorized
+                message: Bearer token is missing or invalid
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorLogRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - occurredAt
+        - level
+        - platform
+        - service
+        - source
+        - error
+      properties:
+        eventId:
+          type: string
+          description: Client-generated identifier for idempotency or correlation.
+          examples:
+            - 767d5a66-2b41-4c2e-90e8-6dd0149491df
+        occurredAt:
+          type: string
+          format: date-time
+          description: Timestamp when the error occurred.
+        level:
+          type: string
+          description: Severity assigned by the caller.
+          enum:
+            - debug
+            - info
+            - warning
+            - error
+            - critical
+        platform:
+          type: string
+          description: >
+            High-level origin of the error. Keep this broad so the API remains
+            platform-agnostic.
+          examples:
+            - web
+            - backend
+            - mobile
+            - worker
+            - cli
+        environment:
+          type: string
+          description: Deployment environment such as production or staging.
+          examples:
+            - production
+            - staging
+        service:
+          $ref: '#/components/schemas/ServiceDescriptor'
+        source:
+          $ref: '#/components/schemas/ErrorSource'
+        error:
+          $ref: '#/components/schemas/ErrorPayload'
+        context:
+          $ref: '#/components/schemas/ErrorContext'
+
+    ServiceDescriptor:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Logical service or application name.
+        version:
+          type: string
+          description: Deployed version, build number, or git SHA.
+        instanceId:
+          type: string
+          description: Optional runtime instance or host identifier.
+
+    ErrorSource:
+      type: object
+      additionalProperties: false
+      required:
+        - runtime
+        - language
+      properties:
+        runtime:
+          type: string
+          description: Runtime that produced the error.
+          examples:
+            - node
+            - browser
+            - cpython
+            - jvm
+        language:
+          type: string
+          description: Primary implementation language.
+          examples:
+            - typescript
+            - javascript
+            - python
+            - go
+        framework:
+          type: string
+          description: Framework or library involved, when relevant.
+          examples:
+            - next.js
+            - fastapi
+            - django
+        component:
+          type: string
+          description: Application component, module, job, or subsystem.
+
+    ErrorPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - message
+      properties:
+        type:
+          type: string
+          description: Exception or error class/type name.
+          examples:
+            - TypeError
+            - ValueError
+        message:
+          type: string
+          description: Human-readable error message.
+        code:
+          type: string
+          description: Application-specific or platform-specific error code.
+        stack:
+          type: string
+          description: Stack trace or traceback as text.
+        handled:
+          type: boolean
+          description: Whether the error was caught and handled by the client.
+        details:
+          $ref: '#/components/schemas/JsonObject'
+
+    ErrorContext:
+      type: object
+      description: Optional metadata that helps with debugging and correlation.
+      additionalProperties:
+        $ref: '#/components/schemas/JsonValue'
+      properties:
+        request:
+          $ref: '#/components/schemas/JsonObject'
+        user:
+          $ref: '#/components/schemas/JsonObject'
+        session:
+          $ref: '#/components/schemas/JsonObject'
+        device:
+          $ref: '#/components/schemas/JsonObject'
+        correlationId:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    ErrorLogAccepted:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - receivedAt
+      properties:
+        id:
+          type: string
+          description: Server-generated identifier for the accepted log.
+        status:
+          type: string
+          enum:
+            - accepted
+        receivedAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    JsonObject:
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/JsonValue'
+
+    JsonValue:
+      anyOf:
+        - type: string
+        - type: number
+        - type: integer
+        - type: boolean
+        - type: 'null'
+        - type: array
+          items:
+            $ref: '#/components/schemas/JsonValue'
+        - $ref: '#/components/schemas/JsonObject'
