@@ -60,8 +60,8 @@ export function ExampleRunner({ project, onRunSettled }: ExampleRunnerProps) {
   const [open, setOpen] = useState(false)
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border-b">
-      <CollapsibleTrigger className="flex w-full items-center gap-2 px-6 py-3 text-left hover:bg-muted/50 transition-colors">
+    <Collapsible open={open} onOpenChange={setOpen} className="border-b border-white/10 bg-[#0F1115]/40">
+      <CollapsibleTrigger className="flex w-full items-center gap-2 px-6 py-4 text-left transition-colors hover:bg-white/[0.03]">
         <ChevronRight
           className={cn(
             "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
@@ -69,8 +69,8 @@ export function ExampleRunner({ project, onRunSettled }: ExampleRunnerProps) {
           )}
         />
         <div className="flex-1">
-          <h3 className="text-sm font-semibold">Connector examples</h3>
-          <p className="text-xs text-muted-foreground">
+          <h3 className="font-heading text-base font-semibold">Connector examples</h3>
+          <p className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
             Run a local stack demo that sends a runtime error to this project.
           </p>
         </div>
@@ -79,26 +79,26 @@ export function ExampleRunner({ project, onRunSettled }: ExampleRunnerProps) {
         )}
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="px-6 pb-4 overflow-hidden">
+      <CollapsibleContent className="overflow-hidden px-6 pb-5">
         {examples.isError ? (
           <div className="flex items-center gap-2 text-sm text-destructive">
             <AlertCircle className="h-4 w-4" />
             Failed to load examples
           </div>
         ) : (
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {examples.data?.map((example) => (
               <Button
                 key={example.id}
                 variant="outline"
-                className="h-auto justify-start px-3 py-2 text-left"
+                className="h-auto justify-start px-4 py-3 text-left"
                 disabled={startRun.isPending}
                 onClick={() => startRun.mutate(example.id)}
               >
                 <Play className="mr-2 h-4 w-4 shrink-0" />
                 <span className="min-w-0">
-                  <span className="block truncate text-sm">{example.name}</span>
-                  <span className="block truncate text-xs font-normal text-muted-foreground">
+                  <span className="block truncate text-sm font-medium">{example.name}</span>
+                  <span className="block truncate font-mono text-[11px] font-normal tracking-wide text-muted-foreground uppercase">
                     {example.description}
                   </span>
                 </span>
@@ -108,7 +108,7 @@ export function ExampleRunner({ project, onRunSettled }: ExampleRunnerProps) {
         )}
 
         {(startRun.isError || selectedRun) && (
-          <div className="mt-3 rounded-md border bg-muted/30 p-3">
+          <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
             {startRun.isError ? (
               <p className="text-sm text-destructive">
                 {(startRun.error as Error).message}
@@ -120,11 +120,11 @@ export function ExampleRunner({ project, onRunSettled }: ExampleRunnerProps) {
                     variant={
                       selectedRun.status === "failed" ? "destructive" : "secondary"
                     }
-                    className={cn(selectedRun.status === "running" && "animate-pulse")}
+                    className={cn(selectedRun.status === "running" && "animate-pulse-live")}
                   >
                     {selectedRun.status}
                   </Badge>
-                  <span className="font-mono text-xs text-muted-foreground">
+                  <span className="font-mono text-[11px] tracking-wide text-muted-foreground uppercase">
                     {selectedRun.exampleId} / {selectedRun.id}
                   </span>
                 </div>
@@ -132,7 +132,7 @@ export function ExampleRunner({ project, onRunSettled }: ExampleRunnerProps) {
                   <p className="text-sm text-muted-foreground">{selectedRun.manual}</p>
                 )}
                 {outputPreview(selectedRun) && (
-                  <pre className="max-h-40 overflow-auto rounded-md bg-background p-2 text-xs whitespace-pre-wrap break-all">
+                  <pre className="max-h-40 overflow-auto rounded-xl border border-white/10 bg-black/45 p-3 font-mono text-xs whitespace-pre-wrap break-all">
                     {outputPreview(selectedRun)}
                   </pre>
                 )}
