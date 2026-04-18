@@ -1,8 +1,7 @@
 "use strict";
 
 function renderWelcome(user) {
-  const displayName = user.profile?.displayName || "guest";
-  return `Welcome, ${displayName.toUpperCase()}`;
+  return `Welcome, ${user.profile.displayName.toUpperCase()}`;
 }
 
 module.exports = {
