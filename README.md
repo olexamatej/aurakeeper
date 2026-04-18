@@ -26,6 +26,10 @@ captures the right foundation: service metadata, source runtime, normalized
 error fields, stack traces, arbitrary details, request/user/session context, and
 tags.
 
+For teams already using Sentry, the backend can also store a project-scoped
+Sentry source and poll that project for fresh Sentry events, mapping each one
+into the same normalized `ErrorLogRequest` shape before persistence.
+
 ## Product Shape
 
 AuraKeeper should sit between error reporting and code repair.

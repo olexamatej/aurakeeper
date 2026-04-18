@@ -286,7 +286,7 @@ function isDockerPreferredEnvironment(environment: VerificationEnvironment): boo
   return environment === "production" || environment === "hosted";
 }
 
-function choosePreferredBackend(input: BackendSelectionInput): ExecutionBackendPreference {
+function choosePreferredBackend(input: BackendSelectionInput): ExecutionBackendId {
   if (input.requestedBackend && input.requestedBackend !== "auto") {
     return input.requestedBackend;
   }

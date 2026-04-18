@@ -51,3 +51,35 @@ export const errorLogs = sqliteTable(
     serviceNameIdx: index("error_logs_service_name_idx").on(table.serviceName),
   })
 );
+
+export const sentrySources = sqliteTable(
+  "sentry_sources",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id").notNull(),
+    organizationSlug: text("organization_slug").notNull(),
+    sentryProjectSlug: text("sentry_project_slug").notNull(),
+    baseUrl: text("base_url").notNull(),
+    authToken: text("auth_token").notNull(),
+    environment: text("environment"),
+    maxEventsPerPoll: integer("max_events_per_poll").default(100).notNull(),
+    serviceName: text("service_name"),
+    serviceVersion: text("service_version"),
+    serviceInstanceId: text("service_instance_id"),
+    sourceRuntime: text("source_runtime"),
+    sourceLanguage: text("source_language"),
+    sourceFramework: text("source_framework"),
+    sourceComponent: text("source_component"),
+    lastPolledAt: text("last_polled_at"),
+    lastPollError: text("last_poll_error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => ({
+    projectIdIdx: index("sentry_sources_project_id_idx").on(table.projectId),
+    projectSlugIdx: index("sentry_sources_project_slug_idx").on(
+      table.organizationSlug,
+      table.sentryProjectSlug
+    ),
+  })
+);

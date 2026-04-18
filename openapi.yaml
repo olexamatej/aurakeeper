@@ -19,6 +19,8 @@ tags:
     description: Create projects and issue ingestion tokens.
   - name: Error Logs
     description: Submit structured error events.
+  - name: Source Integrations
+    description: Configure upstream providers that AuraKeeper can poll for errors.
 
 paths:
   /v1/projects:
@@ -240,6 +242,143 @@ paths:
               example:
                 error: unauthorized
                 message: API token is missing or invalid
+  /v1/sources/sentry:
+    post:
+      tags:
+        - Source Integrations
+      operationId: createSentrySource
+      summary: Connect a Sentry project
+      description: >
+        Stores project-scoped Sentry credentials and polling settings so AuraKeeper
+        can import error events from Sentry into the standard error log pipeline.
+        The Sentry token should have at least project read access for the target
+        project.
+      security:
+        - apiTokenAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSentrySourceRequest'
+            example:
+              organizationSlug: acme
+              projectSlug: aura-web
+              authToken: sntrys_1234567890abcdef
+              baseUrl: https://sentry.io
+              environment: production
+              maxEventsPerPoll: 100
+              service:
+                name: aura-web
+                version: "2026.04.18"
+              source:
+                runtime: node
+                language: typescript
+                framework: next.js
+                component: app-router
+      responses:
+        '201':
+          description: Sentry source created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SentrySource'
+              example:
+                id: sentrysrc_01hsv7z2kq4t1ta7r8p8w9j1bm
+                organizationSlug: acme
+                projectSlug: aura-web
+                baseUrl: https://sentry.io
+                environment: production
+                maxEventsPerPoll: 100
+                service:
+                  name: aura-web
+                  version: "2026.04.18"
+                source:
+                  runtime: node
+                  language: typescript
+                  framework: next.js
+                  component: app-router
+                createdAt: "2026-04-18T08:40:00Z"
+                updatedAt: "2026-04-18T08:40:00Z"
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: invalid_request
+                message: body.baseUrl must be a valid URL
+        '401':
+          description: Missing or invalid API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: unauthorized
+                message: API token is missing or invalid
+  /v1/sources/sentry/{sourceId}/poll:
+    post:
+      tags:
+        - Source Integrations
+      operationId: pollSentrySource
+      summary: Poll Sentry for new error events
+      description: >
+        Fetches error events from the configured Sentry project since the last
+        successful poll, maps them into AuraKeeper's `ErrorLogRequest` format,
+        and stores any newly imported events as normal error logs.
+      security:
+        - apiTokenAuth: []
+      parameters:
+        - name: sourceId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Server-generated Sentry source identifier.
+      responses:
+        '200':
+          description: Sentry poll finished
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SentryPollResult'
+              example:
+                sourceId: sentrysrc_01hsv7z2kq4t1ta7r8p8w9j1bm
+                status: completed
+                fetchedCount: 12
+                importedCount: 8
+                duplicateCount: 3
+                filteredCount: 1
+                lastPolledAt: "2026-04-18T08:45:00Z"
+        '401':
+          description: Missing or invalid API token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: unauthorized
+                message: API token is missing or invalid
+        '404':
+          description: Sentry source not found for the authenticated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: not_found
+                message: Sentry source not found
+        '502':
+          description: Sentry request failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: upstream_error
+                message: Sentry rejected the request. Check the auth token and project scope.
 
 components:
   securitySchemes:
@@ -287,6 +426,138 @@ components:
           type: string
           description: Project token to include in the X-API-Token header for log ingestion.
         createdAt:
+          type: string
+          format: date-time
+
+    CreateSentrySourceRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - organizationSlug
+        - projectSlug
+        - authToken
+      properties:
+        organizationSlug:
+          type: string
+          description: Sentry organization slug.
+        projectSlug:
+          type: string
+          description: Sentry project slug inside the organization.
+        authToken:
+          type: string
+          description: >
+            Sentry API token with permission to read project error events.
+        baseUrl:
+          type: string
+          format: uri
+          description: Base Sentry host URL. Defaults to https://sentry.io.
+        environment:
+          type: string
+          description: Optional environment filter applied to imported Sentry events.
+        maxEventsPerPoll:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+          description: Maximum number of Sentry events to ingest during one poll.
+        service:
+          $ref: '#/components/schemas/SentryServiceOverrides'
+        source:
+          $ref: '#/components/schemas/SentrySourceOverrides'
+
+    SentryServiceOverrides:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        instanceId:
+          type: string
+
+    SentrySourceOverrides:
+      type: object
+      additionalProperties: false
+      properties:
+        runtime:
+          type: string
+        language:
+          type: string
+        framework:
+          type: string
+        component:
+          type: string
+
+    SentrySource:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - organizationSlug
+        - projectSlug
+        - baseUrl
+        - maxEventsPerPoll
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          description: Server-generated Sentry source identifier.
+        organizationSlug:
+          type: string
+        projectSlug:
+          type: string
+        baseUrl:
+          type: string
+          format: uri
+        environment:
+          type: string
+        maxEventsPerPoll:
+          type: integer
+        service:
+          $ref: '#/components/schemas/SentryServiceOverrides'
+        source:
+          $ref: '#/components/schemas/SentrySourceOverrides'
+        lastPolledAt:
+          type: string
+          format: date-time
+        lastPollError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SentryPollResult:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceId
+        - status
+        - fetchedCount
+        - importedCount
+        - duplicateCount
+        - filteredCount
+        - lastPolledAt
+      properties:
+        sourceId:
+          type: string
+        status:
+          type: string
+          enum:
+            - completed
+        fetchedCount:
+          type: integer
+        importedCount:
+          type: integer
+        duplicateCount:
+          type: integer
+        filteredCount:
+          type: integer
+        lastPolledAt:
           type: string
           format: date-time
 

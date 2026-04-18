@@ -54,3 +54,32 @@ curl http://localhost:3000/v1/logs/errors \
 ```
 
 Accepted error logs are created with the default workflow state `new_error`.
+
+Connect a project-scoped Sentry source:
+
+```bash
+curl -X POST http://localhost:3000/v1/sources/sentry \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Token: <project-token>' \
+  -d '{
+    "organizationSlug": "acme",
+    "projectSlug": "aura-web",
+    "authToken": "sntrys_1234567890abcdef",
+    "environment": "production",
+    "maxEventsPerPoll": 100,
+    "service": { "name": "aura-web", "version": "2026.04.18" },
+    "source": {
+      "runtime": "node",
+      "language": "typescript",
+      "framework": "next.js",
+      "component": "app-router"
+    }
+  }'
+```
+
+Poll the configured Sentry source and import any new events into `error_logs`:
+
+```bash
+curl -X POST http://localhost:3000/v1/sources/sentry/<source-id>/poll \
+  -H 'X-API-Token: <project-token>'
+```

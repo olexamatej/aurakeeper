@@ -68,6 +68,28 @@ sqlite.exec(`
 
   CREATE INDEX IF NOT EXISTS error_logs_service_name_idx
     ON error_logs (service_name);
+
+  CREATE TABLE IF NOT EXISTS sentry_sources (
+    id TEXT PRIMARY KEY NOT NULL,
+    project_id TEXT NOT NULL,
+    organization_slug TEXT NOT NULL,
+    sentry_project_slug TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    auth_token TEXT NOT NULL,
+    environment TEXT,
+    max_events_per_poll INTEGER NOT NULL DEFAULT 100,
+    service_name TEXT,
+    service_version TEXT,
+    service_instance_id TEXT,
+    source_runtime TEXT,
+    source_language TEXT,
+    source_framework TEXT,
+    source_component TEXT,
+    last_polled_at TEXT,
+    last_poll_error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 if (!hasColumn("error_logs", "project_id")) {
@@ -84,6 +106,12 @@ sqlite.exec(`
 
   CREATE INDEX IF NOT EXISTS error_logs_state_idx
     ON error_logs (state);
+
+  CREATE INDEX IF NOT EXISTS sentry_sources_project_id_idx
+    ON sentry_sources (project_id);
+
+  CREATE INDEX IF NOT EXISTS sentry_sources_project_slug_idx
+    ON sentry_sources (organization_slug, sentry_project_slug);
 `);
 
 export const sqliteDb = sqlite;
