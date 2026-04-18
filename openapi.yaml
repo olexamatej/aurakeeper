@@ -165,6 +165,7 @@ paths:
                 $ref: '#/components/schemas/ErrorLogAccepted'
               example:
                 id: log_01HSV6M2KQ4T1TA7R8P8W9J1BM
+                state: new_error
                 status: accepted
                 receivedAt: "2026-04-18T08:32:18Z"
         '400':
@@ -234,6 +235,23 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    ErrorLogState:
+      type: string
+      enum:
+        - new_error
+        - repro_started
+        - repro_succeeded
+        - repro_failed
+        - fix_started
+        - fix_succeeded
+        - fix_failed
+        - verify_started
+        - verify_succeeded
+        - verify_failed
+        - deploy_started
+        - deploy_succeeded
+        - deploy_failed
 
     ErrorLogRequest:
       type: object
@@ -393,12 +411,15 @@ components:
       additionalProperties: false
       required:
         - id
+        - state
         - status
         - receivedAt
       properties:
         id:
           type: string
           description: Server-generated identifier for the accepted log.
+        state:
+          $ref: '#/components/schemas/ErrorLogState'
         status:
           type: string
           enum:

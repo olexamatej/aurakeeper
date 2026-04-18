@@ -1,6 +1,21 @@
 const LEVELS = new Set(["debug", "info", "warning", "error", "critical"]);
 const RFC3339_DATE_TIME =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISSUE_STATES = [
+  "new_error",
+  "repro_started",
+  "repro_succeeded",
+  "repro_failed",
+  "fix_started",
+  "fix_succeeded",
+  "fix_failed",
+  "verify_started",
+  "verify_succeeded",
+  "verify_failed",
+  "deploy_started",
+  "deploy_succeeded",
+  "deploy_failed",
+] as const;
 
 type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
 type JsonObject = { [key: string]: JsonValue };
@@ -52,6 +67,8 @@ export type CreateProjectRequest = {
   name: string;
 };
 
+export type IssueState = (typeof ISSUE_STATES)[number];
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -61,6 +78,10 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+export function isIssueState(value: string): value is IssueState {
+  return ISSUE_STATES.includes(value as IssueState);
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

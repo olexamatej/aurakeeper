@@ -7,6 +7,7 @@ import { errorLogs, projects } from "./schema";
 import { openapi } from "@elysiajs/openapi";
 import {
   ApiError,
+  IssueState,
   parseCreateProjectRequest,
   parseErrorLogRequest,
 } from "./validation";
@@ -37,8 +38,35 @@ async function parseJsonBody(request: Request): Promise<unknown> {
   }
 }
 
+function requireProjectByApiToken(apiToken: string | null) {
+  if (!apiToken) {
+    throw new ApiError(401, "unauthorized", "API token is missing or invalid");
+  }
+
+  const project = db
+    .select()
+    .from(projects)
+    .where(eq(projects.token, apiToken))
+    .get();
+
+  if (!project) {
+    throw new ApiError(401, "unauthorized", "API token is missing or invalid");
+  }
+
+  return project;
+}
+
 export const app = new Elysia()
-  .onError(({ error, set }) => {
+  .onError(({ code, error, set }) => {
+    if (code === "NOT_FOUND") {
+      set.status = 404;
+
+      return {
+        error: "not_found",
+        message: "Route not found",
+      };
+    }
+
     if (error instanceof ApiError) {
       set.status = error.status;
 
@@ -57,7 +85,13 @@ export const app = new Elysia()
     };
   })
   .use(openapi())
-  .get("/", () => "OK")
+  .get("/", () => ({
+    status: "ok",
+    docs: "/openapi",
+  }))
+  .get("/health", () => ({
+    status: "ok",
+  }))
   .post("/v1/projects", async ({ request, set }) => {
     const adminToken = request.headers.get("x-admin-token");
 
@@ -93,33 +127,11 @@ export const app = new Elysia()
     };
   })
   .post("/v1/logs/errors", async ({ request, set }) => {
-    const apiToken = request.headers.get("x-api-token");
-
-    if (!apiToken) {
-      throw new ApiError(
-        401,
-        "unauthorized",
-        "API token is missing or invalid",
-      );
-    }
-
-    const project = db
-      .select()
-      .from(projects)
-      .where(eq(projects.token, apiToken))
-      .get();
-
-    if (!project) {
-      throw new ApiError(
-        401,
-        "unauthorized",
-        "API token is missing or invalid",
-      );
-    }
-
+    const project = requireProjectByApiToken(request.headers.get("x-api-token"));
     const payload = parseErrorLogRequest(await parseJsonBody(request));
     const receivedAt = new Date().toISOString();
     const id = createLogId();
+    const initialState: IssueState = "new_error";
 
     db.insert(errorLogs)
       .values({
@@ -156,6 +168,7 @@ export const app = new Elysia()
 
     return {
       id,
+      state: initialState,
       status: "accepted" as const,
       receivedAt,
     };

@@ -45,3 +45,5 @@ curl -X POST http://localhost:3000/v1/logs/errors \
     "error": { "message": "Cannot read properties of undefined" }
   }'
 ```
+
+Accepted error logs are created with the default workflow state `new_error`.
